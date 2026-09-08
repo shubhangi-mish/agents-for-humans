@@ -1,0 +1,46 @@
+{
+  "_note": "Synthetic emergency-response directory for demo purposes only. All names, phone numbers, and IDs are fictional and do not correspond to real individuals.",
+  "responders": [
+    {
+      "id": "resp-001",
+      "name": "Arjun Mehta",
+      "title": "Field Operations Coordinator",
+      "team": "Emergency Response B",
+      "phone": "+91-98XX-XXX-214",
+      "status": "available",
+      "base_location": "Saket"
+    },
+    {
+      "id": "resp-002",
+      "name": "Priya Nair",
+      "title": "Drainage Team Lead",
+      "team": "Drainage Team A",
+      "phone": "+91-98XX-XXX-441",
+      "status": "available",
+      "base_location": "Malviya Nagar"
+    },
+    {
+      "id": "resp-003",
+      "name": "Sanjay Rao",
+      "title": "Medical Response Lead",
+      "team": "Medical Team C",
+      "phone": "+91-98XX-XXX-882",
+      "status": "available",
+      "base_location": "Hauz Khas"
+    },
+    {
+      "id": "resp-004",
+      "name": "Devika Iyer",
+      "title": "Emergency Coordinator (Escalation Contact)",
+      "team": "Emergency Operations Center",
+      "phone": "+91-98XX-XXX-005",
+      "status": "on_call",
+      "base_location": "EOC HQ"
+    }
+  ],
+  "teams": [
+    { "id": "team-b", "name": "Emergency Response B", "lead": "resp-001", "capability": "general emergency deployment" },
+    { "id": "team-a", "name": "Drainage Team A", "lead": "resp-002", "capability": "drainage inspection and clearance" },
+    { "id": "team-c", "name": "Medical Team C", "lead": "resp-003", "capability": "hospital access and medical logistics" }
+  ]
+}

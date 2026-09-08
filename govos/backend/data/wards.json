@@ -1,0 +1,26 @@
+{
+  "_note": "Illustrative ward/zone layout for the demo scenario (South Delhi flood response). Structured to mirror publicly published municipal ward data formats, not a verbatim copy of any single source.",
+  "wards": [
+    {
+      "id": "ward-43",
+      "name": "Ward 43",
+      "baseline_flood_risk": "medium",
+      "key_locations": ["Community Hospital North", "Ring Road Junction"]
+    },
+    {
+      "id": "ward-51",
+      "name": "Ward 51",
+      "baseline_flood_risk": "medium",
+      "key_locations": ["Government Primary School 51", "Local Market Road"]
+    },
+    {
+      "id": "ward-54",
+      "name": "Ward 54",
+      "baseline_flood_risk": "high",
+      "key_locations": ["District Hospital", "Underpass Road 9"]
+    }
+  ],
+  "hospitals": [
+    { "id": "hosp-1", "name": "District Hospital", "ward": "ward-54", "access_status": "open" }
+  ]
+}

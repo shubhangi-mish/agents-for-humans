@@ -1,0 +1,20 @@
+{
+  "_note": "Synthetic SOP written for this demo, styled after publicly known flood-response procedure structures. Not a copy of any specific government document.",
+  "id": "SOP-FLOOD-4.2",
+  "title": "Flood Response SOP v4.2",
+  "trigger_conditions": [
+    "Rainfall intensity classified HIGH by weather feed",
+    "One or more wards flagged at elevated flood risk"
+  ],
+  "auto_approved_actions": [
+    "Deploy drainage inspection team to affected ward",
+    "Deploy general emergency response team to affected ward",
+    "Send SMS/voice alert to affected-ward responders"
+  ],
+  "requires_human_approval": [
+    "Any expenditure above INR 5,00,000",
+    "Deploying medical teams to a facility flagged as access-blocked",
+    "Public-facing emergency broadcast to citizens"
+  ],
+  "escalation_rule": "If a task tagged CRITICAL remains unresolved 15+ minutes after assignment, escalate to Emergency Coordinator (on-call) and open an approval request if further spend or medical deployment is required."
+}

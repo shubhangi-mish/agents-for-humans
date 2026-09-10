@@ -65,6 +65,8 @@ class Approval(BaseModel):
 class Incident(BaseModel):
     id: str = Field(default_factory=lambda: new_id("inc"))
     title: str
+    scenario: str = "building_collapse"
+    location: str = "Satya Niketan"
     severity: str = "high"
     status: IncidentStatus = IncidentStatus.ACTIVE
     affected_wards: list[str] = Field(default_factory=list)

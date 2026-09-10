@@ -1,37 +1,40 @@
 "use client";
 
 import { useState } from "react";
-import AgentGraph from "@/components/AgentGraph";
-import ApprovalCard from "@/components/ApprovalCard";
-import DecisionStack from "@/components/DecisionStack";
+import CityMap from "@/components/CityMap";
 import EventStream from "@/components/EventStream";
-import Map from "@/components/Map";
-import { resolveApproval, triggerIncident, useEventStream } from "@/lib/useEventStream";
+import KanbanBoard from "@/components/KanbanBoard";
+import OfficeChain from "@/components/OfficeChain";
+import { resolveApproval, useEventStream, useIncidentList } from "@/lib/useEventStream";
 
-const PANEL: React.CSSProperties = {
-  background: "#141414",
-  border: "1px solid #262626",
-  borderRadius: 10,
-  padding: 16,
-  display: "flex",
-  flexDirection: "column",
-  minHeight: 0,
+const STATUS_LABEL: Record<string, string> = {
+  active: "Active",
+  paused_for_approval: "Awaiting approval",
+  resolved: "Resolved",
+};
+
+const STATUS_COLOR: Record<string, string> = {
+  active: "#5b9dd9",
+  paused_for_approval: "#e0b34d",
+  resolved: "#6bbf7b",
 };
 
 export default function Page() {
-  const [incidentId, setIncidentId] = useState<string | null>(null);
-  const incident = useEventStream(incidentId);
+  const incidents = useIncidentList();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const incident = useEventStream(selectedId);
 
-  const pendingApproval = incident?.approvals.find((a) => a.status === "pending");
-
-  async function handleTrigger() {
-    const { incident_id } = await triggerIncident({ zone: "South Delhi" });
-    setIncidentId(incident_id);
+  async function handleDecideApproval(approvalId: string, approve: boolean) {
+    if (!incident) return;
+    await resolveApproval(incident.id, approvalId, approve);
   }
 
-  async function handleDecide(approve: boolean) {
-    if (!incident || !pendingApproval) return;
-    await resolveApproval(incident.id, pendingApproval.id, approve);
+  if (!selectedId || !incident) {
+    return (
+      <main style={{ height: "100vh", width: "100vw" }}>
+        <CityMap incidents={incidents} onSelect={setSelectedId} />
+      </main>
+    );
   }
 
   return (
@@ -39,56 +42,72 @@ export default function Page() {
       style={{
         height: "100vh",
         display: "grid",
-        gridTemplateRows: "56px 1fr 180px",
-        gap: 12,
+        gridTemplateRows: "auto auto 1fr auto",
+        gap: 10,
         padding: 12,
+        minHeight: 0,
       }}
     >
-      <header
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "0 4px",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-          <span style={{ fontSize: 18, fontWeight: 800, letterSpacing: 0.5 }}>GOVOS</span>
-          <span style={{ fontSize: 12, color: "#888" }}>
-            {incident ? `${incident.title} — ${incident.severity.toUpperCase()}` : "No active incident"}
+      <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 4px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 16, fontWeight: 800, letterSpacing: 0.5 }}>{incident.title}</span>
+          <span
+            style={{
+              fontSize: 10.5,
+              color: STATUS_COLOR[incident.status],
+              border: `1px solid ${STATUS_COLOR[incident.status]}66`,
+              borderRadius: 4,
+              padding: "2px 8px",
+              fontWeight: 700,
+              letterSpacing: 0.3,
+            }}
+          >
+            {STATUS_LABEL[incident.status]}
           </span>
+          <span style={{ fontSize: 11, color: "#666" }}>{incident.severity.toUpperCase()}</span>
         </div>
         <button
-          onClick={handleTrigger}
+          onClick={() => setSelectedId(null)}
           style={{
-            background: "#1c3a52",
-            color: "#cfe6ff",
-            border: "1px solid #2d5674",
+            background: "#1a1a1a",
+            color: "#bbb",
+            border: "1px solid #333",
             borderRadius: 6,
-            padding: "8px 16px",
+            padding: "6px 12px",
             cursor: "pointer",
-            fontSize: 13,
+            fontSize: 12,
           }}
         >
-          Inject weather event
+          ← Back to city map
         </button>
       </header>
 
-      <section style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr 1fr", gap: 12, minHeight: 0 }}>
-        <div style={PANEL}>
-          <Map affectedWards={incident?.affected_wards ?? []} tasks={incident?.tasks ?? []} />
-        </div>
-        <div style={PANEL}>
-          <AgentGraph events={incident?.events ?? []} />
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 12, minHeight: 0 }}>
-          <div style={PANEL}>{incident && <DecisionStack incident={incident} />}</div>
-          {pendingApproval && <ApprovalCard approval={pendingApproval} onDecide={handleDecide} />}
-        </div>
-      </section>
+      <div style={{ background: "#141414", border: "1px solid #262626", borderRadius: 10, padding: 12 }}>
+        <OfficeChain incident={incident} />
+      </div>
 
-      <section style={PANEL}>
-        <EventStream events={incident?.events ?? []} />
+      <div style={{ minHeight: 0 }}>
+        <KanbanBoard incident={incident} onDecideApproval={handleDecideApproval} />
+      </div>
+
+      <section
+        style={{
+          background: "#141414",
+          border: "1px solid #262626",
+          borderRadius: 10,
+          padding: 12,
+          maxHeight: 140,
+          display: "flex",
+          flexDirection: "column",
+          minHeight: 0,
+        }}
+      >
+        <div style={{ fontSize: 11, color: "#777", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
+          Activity
+        </div>
+        <div style={{ overflowY: "auto", minHeight: 0 }}>
+          <EventStream events={incident.events} />
+        </div>
       </section>
     </main>
   );

@@ -35,6 +35,8 @@ export interface Approval {
 export interface Incident {
   id: string;
   title: string;
+  scenario: string;
+  location: string;
   severity: string;
   status: IncidentStatus;
   affected_wards: string[];

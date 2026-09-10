@@ -28,7 +28,7 @@ export default function ApprovalCard({
           Amount: ₹{approval.amount_inr.toLocaleString("en-IN")}
         </div>
       )}
-      <div style={{ color: "#999", fontSize: 12 }}>
+      <div style={{ color: "#999", fontSize: 12, maxHeight: 90, overflowY: "auto" }}>
         {approval.evidence.map((e, i) => (
           <div key={i}>• {e}</div>
         ))}

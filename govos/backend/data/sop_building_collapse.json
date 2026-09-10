@@ -1,0 +1,21 @@
+{
+  "_note": "SOP structured after publicly known disaster-response procedure patterns (MCD/NDRF/DDMA style escalation), not a copy of any specific government document.",
+  "id": "SOP-STRUCTCOLLAPSE-2.1",
+  "title": "Structural Collapse Response SOP v2.1",
+  "trigger_conditions": [
+    "Building/structure collapse reported in a residential or mixed-use area",
+    "Possible entrapment or casualties at the site"
+  ],
+  "auto_approved_actions": [
+    "Deploy Fire & Rescue Unit to the site for structural assessment",
+    "Deploy Rapid Action Team for area cordon and crowd control",
+    "Send alert to nearby responder units"
+  ],
+  "requires_human_approval": [
+    "Any expenditure above INR 5,00,000",
+    "Deploying Medical/Ambulance Unit to a facility or route flagged as access-blocked",
+    "Requesting NDRF specialist response",
+    "Public-facing emergency broadcast to residents"
+  ],
+  "escalation_rule": "If the hospital-access or rescue task remains unresolved 15+ minutes after assignment, escalate to the District Control Room (on-call) and open an approval request if further spend, NDRF deployment, or blocked-route medical deployment is required."
+}

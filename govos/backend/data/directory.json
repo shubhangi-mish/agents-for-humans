@@ -1,46 +1,56 @@
 {
-  "_note": "Synthetic emergency-response directory for demo purposes only. All names, phone numbers, and IDs are fictional and do not correspond to real individuals.",
+  "_note": "Real public-institution structure (office/unit names and publicly published emergency helplines), not private individuals. No personal names or personal phone numbers are used — every contact here is an office/control-room line, and every dispatch in this demo is simulated/logged, never actually sent to a real number.",
   "responders": [
     {
       "id": "resp-001",
-      "name": "Arjun Mehta",
-      "title": "Field Operations Coordinator",
-      "team": "Emergency Response B",
-      "phone": "+91-98XX-XXX-214",
+      "name": "MCD South Zone — Disaster Management Cell",
+      "title": "Duty Control Room",
+      "team": "Rapid Action Team",
+      "phone": "155305",
       "status": "available",
-      "base_location": "Saket"
+      "base_location": "MCD South Zone Office, Hauz Khas"
     },
     {
       "id": "resp-002",
-      "name": "Priya Nair",
-      "title": "Drainage Team Lead",
-      "team": "Drainage Team A",
-      "phone": "+91-98XX-XXX-441",
+      "name": "Delhi Fire Service — Station Hauz Khas",
+      "title": "Fire & Rescue Unit",
+      "team": "Fire & Rescue Unit",
+      "phone": "101",
       "status": "available",
-      "base_location": "Malviya Nagar"
+      "base_location": "DFS Station, Hauz Khas"
     },
     {
       "id": "resp-003",
-      "name": "Sanjay Rao",
-      "title": "Medical Response Lead",
-      "team": "Medical Team C",
-      "phone": "+91-98XX-XXX-882",
+      "name": "CATS Ambulance Control Room",
+      "title": "Medical/Ambulance Dispatch",
+      "team": "Medical/Ambulance Unit",
+      "phone": "102",
       "status": "available",
-      "base_location": "Hauz Khas"
+      "base_location": "CATS Control Room, Safdarjung"
     },
     {
       "id": "resp-004",
-      "name": "Devika Iyer",
-      "title": "Emergency Coordinator (Escalation Contact)",
+      "name": "DCP South West District Control Room",
+      "title": "Escalation / Law & Order Contact",
       "team": "Emergency Operations Center",
-      "phone": "+91-98XX-XXX-005",
+      "phone": "100",
       "status": "on_call",
-      "base_location": "EOC HQ"
+      "base_location": "South West District HQ"
+    },
+    {
+      "id": "resp-005",
+      "name": "NDRF — 8th Battalion (Delhi NCR)",
+      "title": "National Disaster Response Force Unit",
+      "team": "NDRF Response Team",
+      "phone": "011-24363260",
+      "status": "available",
+      "base_location": "NDRF Delhi Unit"
     }
   ],
   "teams": [
-    { "id": "team-b", "name": "Emergency Response B", "lead": "resp-001", "capability": "general emergency deployment" },
-    { "id": "team-a", "name": "Drainage Team A", "lead": "resp-002", "capability": "drainage inspection and clearance" },
-    { "id": "team-c", "name": "Medical Team C", "lead": "resp-003", "capability": "hospital access and medical logistics" }
+    { "id": "team-rat", "name": "Rapid Action Team", "lead": "resp-001", "capability": "area cordon, crowd control, general emergency deployment" },
+    { "id": "team-fru", "name": "Fire & Rescue Unit", "lead": "resp-002", "capability": "structural rescue, debris clearance, drainage inspection" },
+    { "id": "team-mau", "name": "Medical/Ambulance Unit", "lead": "resp-003", "capability": "casualty evacuation and hospital access" },
+    { "id": "team-ndrf", "name": "NDRF Response Team", "lead": "resp-005", "capability": "heavy structural collapse response, specialist rescue" }
   ]
 }

@@ -15,15 +15,33 @@ import os
 
 from strands import Agent
 from strands.models import BedrockModel
+from strands.models.openai import OpenAIModel
 
-MODEL_ID = os.getenv(
-    "GOVOS_MODEL_ID", "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+# "bedrock" (default, AWS-native — counts toward the hackathon's AWS-stack
+# scoring) or "openai" (cheap dev-loop toggle — see GOVOS_MODEL_PROVIDER).
+MODEL_PROVIDER = os.getenv("GOVOS_MODEL_PROVIDER", "bedrock").lower()
+
+BEDROCK_MODEL_ID = os.getenv(
+    "GOVOS_MODEL_ID", "us.anthropic.claude-3-haiku-20240307-v1:0"
 )
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 
+OPENAI_MODEL_ID = os.getenv("GOVOS_OPENAI_MODEL_ID", "gpt-4o-mini")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-def build_model() -> BedrockModel:
-    return BedrockModel(model_id=MODEL_ID, region_name=AWS_REGION)
+
+def build_model() -> BedrockModel | OpenAIModel:
+    if MODEL_PROVIDER == "openai":
+        if not OPENAI_API_KEY:
+            raise RuntimeError(
+                "GOVOS_MODEL_PROVIDER=openai but OPENAI_API_KEY is not set."
+            )
+        return OpenAIModel(
+            client_args={"api_key": OPENAI_API_KEY},
+            model_id=OPENAI_MODEL_ID,
+            params={"temperature": 0.3},
+        )
+    return BedrockModel(model_id=BEDROCK_MODEL_ID, region_name=AWS_REGION)
 
 
 async def run_agent_turn(agent: Agent, prompt: str) -> str:

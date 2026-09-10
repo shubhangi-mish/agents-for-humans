@@ -25,19 +25,39 @@ from models import Approval, Incident, IncidentStatus, Task, TaskStatus
 
 HOSPITAL_TASK_KEY = "hospital_access_task_id"
 
+SCENARIO_TITLES = {
+    "building_collapse": "Building Collapse Response — {location}",
+    "flood": "Flood Response — South Delhi",
+}
+# Task templates are keyed by scenario so both scenarios can reuse the same
+# real-institution team roster in directory.json (see its _note).
+HOSPITAL_TASK_TITLE = {
+    "building_collapse": "Casualty evacuation — hospital access",
+    "flood": "Hospital access check",
+}
+
 
 def _log_text(incident: Incident) -> str:
     return "\n".join(f"[{e.agent}] {e.text}" for e in incident.events)
 
 
 async def start_incident(trigger: dict) -> Incident:
-    incident = Incident(title="Flood Response — South Delhi", severity="high")
-    incident.log(
-        "system",
-        "system",
-        "Incident triggered by weather feed via EventBridge. No human prompt.",
-        trigger=trigger,
-    )
+    scenario = trigger.get("scenario", "building_collapse")
+    location = trigger.get("location", "Satya Niketan")
+    title = SCENARIO_TITLES.get(scenario, SCENARIO_TITLES["building_collapse"]).format(location=location)
+    incident = Incident(title=title, scenario=scenario, location=location, severity="high")
+    incident.plan_state["scenario"] = scenario
+
+    headline = trigger.get("source_headline")
+    system_text = f"Incident triggered ({scenario}) via EventBridge. No human prompt."
+    if headline:
+        system_text += (
+            f' Signal source: live news — "{headline}" (headline used only to '
+            "decide the incident type; location and response are this "
+            "system's own simulated South Delhi scenario, not the real story's "
+            "location or details)."
+        )
+    incident.log("system", "system", system_text, trigger=trigger)
     return incident
 
 
@@ -46,28 +66,39 @@ async def run_intel_phase(incident: Incident, trigger: dict) -> None:
     text = await run_agent_turn(build_intel_agent(), prompt)
     incident.log("intel_agent", "reasoning", text)
 
-    affected = tools.get_affected_wards(risk_level="high")
+    if incident.scenario == "building_collapse":
+        epicenter_id = trigger.get("location_id", "satya-niketan")
+        affected = tools.get_nearby_localities(epicenter_id, radius=2)
+    else:
+        affected = tools.get_affected_wards(risk_level="high")
     incident.affected_wards = [w["name"] for w in affected]
     incident.log(
         "intel_agent",
         "decision",
-        f"Affected wards identified: {', '.join(incident.affected_wards)}",
+        f"Affected area identified: {', '.join(incident.affected_wards)}",
     )
 
 
 async def run_resource_phase(incident: Incident) -> None:
+    site = incident.affected_wards[0] if incident.affected_wards else incident.location
     prompt = (
-        f"Affected wards: {incident.affected_wards}. Recommend team dispatch and "
-        "check the flood response SOP for what's auto-approved."
+        f"Affected area: {incident.affected_wards}. Recommend team dispatch and "
+        "check the response SOP for what's auto-approved."
     )
     text = await run_agent_turn(build_resource_agent(), prompt)
     incident.log("resource_agent", "reasoning", text)
 
     # Deterministic task creation for demo reliability — mirrors the
     # recommendation the Resource Agent's reasoning above describes.
-    t1 = Task(title="Drainage inspection", owner_agent="Drainage Team A", ward="Ward 54")
-    t2 = Task(title="Emergency deployment", owner_agent="Emergency Response B", ward="Ward 43")
-    t3 = Task(title="Hospital access check", owner_agent="Medical Team C", ward="Ward 54")
+    if incident.scenario == "building_collapse":
+        t1 = Task(title="Structural assessment & rescue", owner_agent="Fire & Rescue Unit", ward=site)
+        t2 = Task(title="Area cordon & crowd control", owner_agent="Rapid Action Team", ward=site)
+    else:
+        t1 = Task(title="Drainage inspection", owner_agent="Fire & Rescue Unit", ward=site)
+        t2 = Task(title="Emergency deployment", owner_agent="Rapid Action Team",
+                   ward=incident.affected_wards[1] if len(incident.affected_wards) > 1 else site)
+    t3 = Task(title=HOSPITAL_TASK_TITLE.get(incident.scenario, "Hospital access check"),
+              owner_agent="Medical/Ambulance Unit", ward=site)
     incident.tasks.extend([t1, t2, t3])
     incident.plan_state[HOSPITAL_TASK_KEY] = t3.id
     for t in (t1, t2, t3):
@@ -75,7 +106,7 @@ async def run_resource_phase(incident: Incident) -> None:
 
 
 async def _policy_check(incident: Incident, action_summary: str, amount_inr: float | None = None) -> bool:
-    sop = tools.get_sop("flood")
+    sop = tools.get_sop(incident.plan_state.get("scenario", "building_collapse"))
     prompt = (
         f"Proposed action: {action_summary}. Amount (INR): {amount_inr}. "
         f"SOP: {sop}. Decide AUTO_APPROVE or REQUIRES_APPROVAL."
@@ -108,7 +139,7 @@ async def run_dispatch_phase(incident: Incident) -> None:
     responders_by_team = {r["team"]: r for r in directory["responders"]}
 
     for task in incident.tasks:
-        if task.owner_agent == "Medical Team C":
+        if task.owner_agent == "Medical/Ambulance Unit":
             continue  # gated separately — hospital deployment always needs a policy check
         approved = await _policy_check(incident, f"Deploy {task.owner_agent} to {task.ward}")
         if not approved:
@@ -150,7 +181,7 @@ async def simulate_hospital_task_failure(incident: Incident) -> None:
     task.status = TaskStatus.ESCALATED
     approved = await _policy_check(
         incident,
-        f"Deploy Medical Team C to {task.ward} (hospital access blocked) + emergency procurement",
+        f"Deploy Medical/Ambulance Unit to {task.ward} (hospital access blocked) + emergency procurement",
         amount_inr=2_500_000,
     )
     if approved:
@@ -159,7 +190,7 @@ async def simulate_hospital_task_failure(incident: Incident) -> None:
 
 async def _complete_hospital_task(incident: Incident, task: Task) -> None:
     directory = tools._load("directory.json")  # noqa: SLF001
-    responder = next(r for r in directory["responders"] if r["team"] == "Medical Team C")
+    responder = next(r for r in directory["responders"] if r["team"] == "Medical/Ambulance Unit")
     result = tools.contact_responder(responder["id"], f"Deploy to {task.ward}, hospital access priority.")
     task.status = TaskStatus.COMPLETED if result["status"] == "confirmed" else TaskStatus.FAILED
     incident.log("comms_agent", "tool_call", f"contact_responder({responder['id']}) -> {result['status']}", task_id=task.id)

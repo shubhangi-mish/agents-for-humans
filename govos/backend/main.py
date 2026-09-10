@@ -3,8 +3,16 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
+import random
+import xml.etree.ElementTree as ET
 from typing import Any
 
+from dotenv import load_dotenv
+
+load_dotenv()  # must run before agents.base reads GOVOS_*/OPENAI_* env vars at import time
+
+import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -30,10 +38,92 @@ store = get_store()
 # incident_id -> list of subscriber asyncio.Queue, for SSE fan-out
 _subscribers: dict[str, list[asyncio.Queue]] = {}
 
+# subscribers to "a new incident just started anywhere" — lets the frontend
+# auto-follow live activity without a human clicking a trigger button.
+_latest_subscribers: list[asyncio.Queue] = []
+
+AUTO_TRIGGER_ENABLED = os.getenv("GOVOS_AUTO_TRIGGER", "true").lower() == "true"
+AUTO_TRIGGER_INTERVAL_SECONDS = int(os.getenv("GOVOS_AUTO_TRIGGER_INTERVAL_SECONDS", "90"))
+
+# Real South Delhi locations to draw from for auto-generated incidents —
+# mirrors backend/data/wards.json.
+AUTO_TRIGGER_POOL: list[dict[str, Any]] = [
+    {"scenario": "building_collapse", "location": "Satya Niketan", "location_id": "satya-niketan"},
+    {"scenario": "building_collapse", "location": "Hauz Khas", "location_id": "hauz-khas"},
+    {"scenario": "building_collapse", "location": "Munirka", "location_id": "munirka"},
+    {"scenario": "flood", "zone": "South Delhi", "rainfall_intensity": "high", "expected_duration_hours": 4},
+]
+
+USE_REAL_NEWS_SIGNAL = os.getenv("GOVOS_USE_REAL_NEWS", "true").lower() == "true"
+NEWS_RSS_URL = (
+    "https://news.google.com/rss/search?q=Delhi%20(fire%20OR%20collapse%20OR%20flood%20OR%20building%20OR%20waterlogging)"
+    "&hl=en-IN&gl=IN&ceid=IN:en"
+)
+NEWS_LOCALITY_IDS = {
+    "satya niketan": ("Satya Niketan", "satya-niketan"),
+    "safdarjung": ("Safdarjung Enclave", "safdarjung-enclave"),
+    "sarojini nagar": ("Sarojini Nagar", "sarojini-nagar"),
+    "munirka": ("Munirka", "munirka"),
+    "hauz khas": ("Hauz Khas", "hauz-khas"),
+}
+
+
+async def _fetch_real_news_trigger() -> dict[str, Any] | None:
+    """Looks for a real, current Delhi disaster-type headline via Google
+    News RSS (public, no API key) and turns it into an incident trigger, so
+    auto-generated incidents are grounded in a real external signal rather
+    than only a fixed synthetic pool — the same role a real EventBridge
+    weather/sensor feed would play. The headline is shown to the user as
+    the *reason* the sim fired; the actual scenario still plays out at our
+    own simulated South Delhi locations/offices, never the real story's
+    real location or any real casualty details."""
+    try:
+        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+            resp = await client.get(NEWS_RSS_URL)
+        resp.raise_for_status()
+        root = ET.fromstring(resp.text)
+        for item in root.findall(".//item")[:15]:
+            title_el = item.find("title")
+            if title_el is None or not title_el.text:
+                continue
+            headline = title_el.text
+            lower = headline.lower()
+
+            if any(k in lower for k in ("flood", "waterlog", "heavy rain")):
+                scenario = "flood"
+            elif any(k in lower for k in ("collapse", "building", "fire", "blaze")):
+                scenario = "building_collapse"
+            else:
+                continue
+
+            location, location_id = "Satya Niketan", "satya-niketan"
+            for needle, (name, loc_id) in NEWS_LOCALITY_IDS.items():
+                if needle in lower:
+                    location, location_id = name, loc_id
+                    break
+
+            return {
+                "scenario": scenario,
+                "location": location,
+                "location_id": location_id,
+                "zone": "South Delhi",
+                "rainfall_intensity": "high",
+                "expected_duration_hours": 4,
+                "source_headline": headline,
+            }
+    except Exception:
+        logger.exception("Real-news trigger fetch failed; falling back to synthetic pool")
+    return None
+
 
 def _broadcast(incident: Incident, event_dict: dict[str, Any]) -> None:
     for q in _subscribers.get(incident.id, []):
         q.put_nowait(event_dict)
+
+
+def _broadcast_latest(incident: Incident) -> None:
+    for q in _latest_subscribers:
+        q.put_nowait({"incident_id": incident.id, "title": incident.title, "scenario": incident.scenario})
 
 
 async def _run_and_stream(incident: Incident, trigger: dict) -> None:
@@ -67,6 +157,9 @@ async def _run_and_stream(incident: Incident, trigger: dict) -> None:
 
 
 class TriggerPayload(BaseModel):
+    scenario: str = "building_collapse"  # "building_collapse" | "flood"
+    location: str = "Satya Niketan"
+    location_id: str = "satya-niketan"
     zone: str = "South Delhi"
     rainfall_intensity: str = "high"
     expected_duration_hours: int = 4
@@ -78,6 +171,7 @@ async def trigger_incident(payload: TriggerPayload) -> dict[str, str]:
     the real EventBridge-triggered path."""
     incident = await incident_engine.start_incident(payload.model_dump())
     store.save(incident)
+    _broadcast_latest(incident)
     asyncio.create_task(_run_and_stream(incident, payload.model_dump()))
     return {"incident_id": incident.id}
 
@@ -92,8 +186,38 @@ async def eventbridge_trigger(envelope: dict[str, Any]) -> dict[str, str]:
     trigger = envelope.get("detail", envelope)
     incident = await incident_engine.start_incident(trigger)
     store.save(incident)
+    _broadcast_latest(incident)
     asyncio.create_task(_run_and_stream(incident, trigger))
     return {"incident_id": incident.id}
+
+
+async def _auto_trigger_loop() -> None:
+    """Simulates a live city feed: periodically starts a new incident, exactly
+    like a real EventBridge weather/sensor feed would, with no human clicking
+    anything. Prefers a real current news signal (see
+    _fetch_real_news_trigger) and falls back to the synthetic location pool
+    when no matching headline is found this cycle."""
+    while True:
+        await asyncio.sleep(AUTO_TRIGGER_INTERVAL_SECONDS)
+        try:
+            trigger = await _fetch_real_news_trigger() if USE_REAL_NEWS_SIGNAL else None
+            source = "live news"
+            if trigger is None:
+                trigger = dict(random.choice(AUTO_TRIGGER_POOL))
+                source = "synthetic feed"
+            incident = await incident_engine.start_incident(trigger)
+            store.save(incident)
+            _broadcast_latest(incident)
+            logger.info("Auto-triggered incident %s (source=%s): %s", incident.id, source, trigger)
+            await _run_and_stream(incident, trigger)
+        except Exception:
+            logger.exception("Auto-trigger loop iteration failed")
+
+
+@app.on_event("startup")
+async def _start_background_tasks() -> None:
+    if AUTO_TRIGGER_ENABLED:
+        asyncio.create_task(_auto_trigger_loop())
 
 
 @app.get("/incidents")
@@ -145,6 +269,25 @@ async def stream(incident_id: str):
                 yield {"event": data["type"], "data": json.dumps(data)}
         finally:
             _subscribers[incident_id].remove(queue)
+
+    return EventSourceResponse(event_generator())
+
+
+@app.get("/stream/latest")
+async def stream_latest():
+    """Announces every new incident (manual, EventBridge, or auto-triggered)
+    as it starts, so the frontend can auto-follow live activity instead of
+    requiring a human to trigger and pick an incident."""
+    queue: asyncio.Queue = asyncio.Queue()
+    _latest_subscribers.append(queue)
+
+    async def event_generator():
+        try:
+            while True:
+                data = await queue.get()
+                yield {"event": "new_incident", "data": json.dumps(data)}
+        finally:
+            _latest_subscribers.remove(queue)
 
     return EventSourceResponse(event_generator())
 

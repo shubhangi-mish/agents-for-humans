@@ -34,7 +34,43 @@ export function useEventStream(incidentId: string | null) {
   return incident;
 }
 
+/** Live list of every incident the city map shows as a trigger point.
+ * Polls (cheap — local JSON store) so status/severity stay fresh, and also
+ * listens on /stream/latest so a brand-new incident's pin appears
+ * immediately instead of waiting for the next poll tick. */
+export function useIncidentList(): Incident[] {
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = () => {
+      fetch(`${API}/incidents`)
+        .then((r) => r.json())
+        .then((list: Incident[]) => {
+          if (!cancelled) setIncidents(list);
+        })
+        .catch(() => {});
+    };
+    refresh();
+    const interval = setInterval(refresh, 5000);
+
+    const source = new EventSource(`${API}/stream/latest`);
+    source.addEventListener("new_incident", () => refresh());
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      source.close();
+    };
+  }, []);
+
+  return incidents;
+}
+
 export async function triggerIncident(payload: {
+  scenario?: string;
+  location?: string;
+  location_id?: string;
   zone?: string;
   rainfall_intensity?: string;
   expected_duration_hours?: number;

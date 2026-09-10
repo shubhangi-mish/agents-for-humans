@@ -14,3 +14,59 @@ body {
 button {
   font-family: inherit;
 }
+
+/* Leaflet dark-theme + gamified marker treatment */
+.leaflet-container {
+  background: #0d0d0d !important;
+  font-family: inherit;
+}
+/* fallback for the no-Mapbox-token path (plain OSM light tiles) so the map
+   still reads dark; unused once a real Mapbox token supplies dark-v11 tiles */
+.leaflet-tile-pane.tiles-fallback-dark {
+  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9);
+}
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: #161616;
+  color: #eee;
+  border: 1px solid #333;
+}
+.leaflet-popup-content-wrapper {
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+.leaflet-control-zoom a {
+  background: #161616 !important;
+  color: #ccc !important;
+  border-color: #333 !important;
+}
+
+/* smooth character/vehicle movement between waypoints — Leaflet repositions
+   markers via a `transform` style it sets directly, so a CSS transition on
+   that same property animates the move without any extra JS */
+.leaflet-marker-icon.govos-div-icon {
+  transition: transform 1.6s ease;
+}
+
+.govos-pulse {
+  animation: govos-pulse-anim 1.3s ease-in-out infinite;
+}
+@keyframes govos-pulse-anim {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.18); }
+}
+
+.govos-city-pulse {
+  position: absolute;
+  left: 3px;
+  top: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2px solid;
+  animation: govos-city-pulse-anim 1.8s ease-out infinite;
+}
+@keyframes govos-city-pulse-anim {
+  0%   { transform: scale(1); opacity: 0.9; }
+  100% { transform: scale(2.6); opacity: 0; }
+}

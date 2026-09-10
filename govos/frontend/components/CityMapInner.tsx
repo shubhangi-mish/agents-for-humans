@@ -25,8 +25,10 @@ const SCENARIO_ICON: Record<string, string> = {
 };
 
 // A real map-pin (teardrop) shape — unmistakably "an active trigger point",
-// never confusable with the small static landmark dots.
-function pinIcon(scenario: string, color: string, pulsing: boolean) {
+// never confusable with the small static landmark dots. Real-news-sourced
+// incidents get a small 📰 badge so it's visually obvious which pins are
+// grounded in an actual headline vs. the synthetic filler pool.
+function pinIcon(scenario: string, color: string, pulsing: boolean, fromRealNews: boolean) {
   return L.divIcon({
     className: "govos-div-icon",
     html: `
@@ -43,6 +45,13 @@ function pinIcon(scenario: string, color: string, pulsing: boolean) {
             display:flex; align-items:center; justify-content:center;
             font-size:15px;
           ">${SCENARIO_ICON[scenario] ?? "🚨"}</div>
+        ${fromRealNews ? `
+        <div style="
+            position:absolute; right:-4px; top:-4px; width:16px; height:16px;
+            border-radius:50%; background:#161616; border:1px solid #555;
+            display:flex; align-items:center; justify-content:center;
+            font-size:9px;
+          " title="Sourced from a real news headline">📰</div>` : ""}
       </div>
     `,
     iconSize: [36, 44],
@@ -116,12 +125,15 @@ export default function CityMapInner({
         <Marker
           key={incident.id}
           position={[lat, lng]}
-          icon={pinIcon(incident.scenario, STATUS_COLOR[incident.status], incident.status !== "resolved")}
+          icon={pinIcon(incident.scenario, STATUS_COLOR[incident.status], incident.status !== "resolved", !!incident.source_headline)}
           eventHandlers={{ click: () => onSelect(incident.id) }}
         >
           <Popup>
             <div style={{ fontWeight: 600 }}>{incident.title}</div>
             <div>{STATUS_LABEL[incident.status]}</div>
+            {incident.source_headline && (
+              <div style={{ marginTop: 4, fontSize: 11, color: "#555" }}>📰 {incident.source_headline}</div>
+            )}
           </Popup>
         </Marker>
       ))}

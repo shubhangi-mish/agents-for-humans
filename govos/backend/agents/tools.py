@@ -84,6 +84,16 @@ def get_hospital_status(ward_id: str) -> dict[str, Any] | None:
 
 
 @tool
+def get_jurisdiction(ward_id: str) -> dict[str, Any] | None:
+    """Looks up the real jurisdiction stack for a locality id — its assembly
+    constituency/MLA office, Lok Sabha constituency/MP office, local police
+    station, MCD ward/zone, water and power utility control rooms. Used so
+    escalation actually names the specific offices that would own this area
+    in real life, not a generic ladder. Returns None for an unknown ward."""
+    return _load("jurisdictions.json")["wards"].get(ward_id)
+
+
+@tool
 def get_sop(topic: str = "building_collapse") -> dict[str, Any]:
     """Loads the Standard Operating Procedure document for the given incident
     scenario (e.g. "building_collapse" or "flood"), including which actions

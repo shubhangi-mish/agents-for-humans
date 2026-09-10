@@ -45,12 +45,72 @@
       "phone": "011-24363260",
       "status": "available",
       "base_location": "NDRF Delhi Unit"
+    },
+    {
+      "id": "resp-006",
+      "name": "District Magistrate (Deputy Commissioner), South West Delhi",
+      "title": "District Magistrate — DDMA-delegated emergency sanction",
+      "team": "District Magistrate",
+      "phone": "011-25088300",
+      "status": "on_call",
+      "base_location": "South West District Office, Dwarka"
+    },
+    {
+      "id": "resp-007",
+      "name": "Office of the Commissioner of Police, Delhi",
+      "title": "Delhi Police — City-wide law & order / specialist-force sanction",
+      "team": "Police Commissioner",
+      "phone": "011-23490202",
+      "status": "on_call",
+      "base_location": "Delhi Police Headquarters, ITO"
+    },
+    {
+      "id": "resp-008",
+      "name": "Delhi Disaster Management Authority (DDMA)",
+      "title": "City-wide disaster sanction / multi-district mutual aid",
+      "team": "DDMA",
+      "phone": "011-21610826",
+      "status": "on_call",
+      "base_location": "DDMA Secretariat, Delhi Secretariat"
+    },
+    {
+      "id": "resp-009",
+      "name": "Delhi Jal Board — Central Control Room",
+      "title": "Water supply / drainage utility control",
+      "team": "Water Utility (DJB)",
+      "phone": "1916",
+      "status": "available",
+      "base_location": "DJB Varunalaya, Karol Bagh"
+    },
+    {
+      "id": "resp-010",
+      "name": "BSES Rajdhani Power Ltd — Fault Control Room",
+      "title": "Power utility control (South/West Delhi discom)",
+      "team": "Power Utility (Discom)",
+      "phone": "19123",
+      "status": "available",
+      "base_location": "BRPL Control Room, Nehru Place"
+    },
+    {
+      "id": "resp-011",
+      "name": "Delhi Transport Corporation — Control Room",
+      "title": "Emergency evacuation bus deployment",
+      "team": "Transport (DTC)",
+      "phone": "1800-118181",
+      "status": "available",
+      "base_location": "DTC Head Office, I.P. Estate"
     }
   ],
   "teams": [
     { "id": "team-rat", "name": "Rapid Action Team", "lead": "resp-001", "capability": "area cordon, crowd control, general emergency deployment" },
     { "id": "team-fru", "name": "Fire & Rescue Unit", "lead": "resp-002", "capability": "structural rescue, debris clearance, drainage inspection" },
     { "id": "team-mau", "name": "Medical/Ambulance Unit", "lead": "resp-003", "capability": "casualty evacuation and hospital access" },
-    { "id": "team-ndrf", "name": "NDRF Response Team", "lead": "resp-005", "capability": "heavy structural collapse response, specialist rescue" }
+    { "id": "team-ndrf", "name": "NDRF Response Team", "lead": "resp-005", "capability": "heavy structural collapse response, specialist rescue" },
+    { "id": "team-dm", "name": "District Magistrate", "lead": "resp-006", "capability": "emergency expenditure sanction, blocked-route medical dispatch authorization" },
+    { "id": "team-cp", "name": "Police Commissioner", "lead": "resp-007", "capability": "NDRF requisition, city-wide law & order sanction" },
+    { "id": "team-ddma", "name": "DDMA", "lead": "resp-008", "capability": "city-wide disaster sanction, multi-district mutual aid, public broadcast authorization" },
+    { "id": "team-djb", "name": "Water Utility (DJB)", "lead": "resp-009", "capability": "water/drainage shutoff and inspection" },
+    { "id": "team-discom", "name": "Power Utility (Discom)", "lead": "resp-010", "capability": "power isolation at collapse/flood site" },
+    { "id": "team-dtc", "name": "Transport (DTC)", "lead": "resp-011", "capability": "emergency evacuation bus deployment" }
   ]
 }

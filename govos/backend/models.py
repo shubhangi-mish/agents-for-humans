@@ -57,6 +57,12 @@ class Approval(BaseModel):
     action_summary: str
     amount_inr: Optional[float] = None
     status: str = "pending"  # pending | approved | rejected
+    # which real office autonomously authorized this, and under what
+    # delegated-authority tier — set when the policy engine resolves the
+    # action itself instead of waiting on a person. None for the rare
+    # case a human later overrides via /approve.
+    authorized_by: Optional[str] = None
+    authority_tier: Optional[str] = None
     resume_token: Optional[str] = None
     created_at: float = Field(default_factory=now)
     resolved_at: Optional[float] = None
@@ -67,6 +73,10 @@ class Incident(BaseModel):
     title: str
     scenario: str = "building_collapse"
     location: str = "Satya Niketan"
+    # set when this incident was auto-triggered off a real news headline
+    # rather than the synthetic location pool — see main.py's
+    # _fetch_real_news_trigger. None for manual/synthetic triggers.
+    source_headline: Optional[str] = None
     severity: str = "high"
     status: IncidentStatus = IncidentStatus.ACTIVE
     affected_wards: list[str] = Field(default_factory=list)

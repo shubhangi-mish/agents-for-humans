@@ -1,3 +1,4 @@
+import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
 import { Approval, Incident, Task } from "@/lib/types";
 import { TEAM_EMOJI } from "@/lib/teams";
 import { TEAM_OFFICE } from "@/lib/offices";
@@ -10,6 +11,8 @@ const COLUMNS: { id: ColumnId; label: string; color: string }[] = [
   { id: "blocked", label: "Blocked / Needs Decision", color: "#e0b34d" },
   { id: "done", label: "Done", color: "#6bbf7b" },
 ];
+
+const CARD_TRANSITION = { type: "spring" as const, stiffness: 380, damping: 32 };
 
 function columnForTask(status: Task["status"]): ColumnId {
   switch (status) {
@@ -28,7 +31,13 @@ function columnForTask(status: Task["status"]): ColumnId {
 function TaskCard({ task }: { task: Task }) {
   const office = TEAM_OFFICE[task.owner_agent];
   return (
-    <div
+    <motion.div
+      layoutId={`task-${task.id}`}
+      layout
+      transition={CARD_TRANSITION}
+      initial={{ opacity: 0, scale: 0.92, y: 6 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.9 }}
       style={{
         background: "#1a1a1a",
         border: "1px solid #2c2c2c",
@@ -42,7 +51,9 @@ function TaskCard({ task }: { task: Task }) {
       <div style={{ fontSize: 12.5, color: "#eee", fontWeight: 600 }}>{task.title}</div>
       <div style={{ fontSize: 11, color: "#888" }}>📍 {task.ward}</div>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
-        <span
+        <motion.span
+          animate={task.status === "in_progress" || task.status === "escalated" ? { scale: [1, 1.15, 1] } : {}}
+          transition={{ duration: 1.1, repeat: Infinity, ease: "easeInOut" }}
           style={{
             width: 20,
             height: 20,
@@ -53,11 +64,11 @@ function TaskCard({ task }: { task: Task }) {
             alignItems: "center",
             justifyContent: "center",
             fontSize: 11,
-            flex: "0 0 auto",
+            flexShrink: 0,
           }}
         >
           {TEAM_EMOJI[task.owner_agent] ?? "🧑‍✈️"}
-        </span>
+        </motion.span>
         <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
           <span style={{ fontSize: 10.5, color: "#bbb", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {office?.office ?? task.owner_agent}
@@ -70,7 +81,7 @@ function TaskCard({ task }: { task: Task }) {
           {task.notes[task.notes.length - 1]}
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }
 
@@ -82,7 +93,13 @@ function ApprovalCardCompact({
   onDecide: (approve: boolean) => void;
 }) {
   return (
-    <div
+    <motion.div
+      layoutId={`appr-${approval.id}`}
+      layout
+      transition={CARD_TRANSITION}
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.9 }}
       style={{
         background: "#221a0f",
         border: "1px solid #e0b34d66",
@@ -112,7 +129,7 @@ function ApprovalCardCompact({
           Reject
         </button>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -126,45 +143,56 @@ export default function KanbanBoard({
   const pendingApprovals = incident.approvals.filter((a) => a.status === "pending");
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, height: "100%", minHeight: 0 }}>
-      {COLUMNS.map((col) => {
-        const tasks = incident.tasks.filter((t) => columnForTask(t.status) === col.id);
-        const approvalsHere = col.id === "blocked" ? pendingApprovals : [];
-        const count = tasks.length + approvalsHere.length;
+    <LayoutGroup>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, alignItems: "start" }}>
+        {COLUMNS.map((col) => {
+          const tasks = incident.tasks.filter((t) => columnForTask(t.status) === col.id);
+          const approvalsHere = col.id === "blocked" ? pendingApprovals : [];
+          const count = tasks.length + approvalsHere.length;
 
-        return (
-          <div
-            key={col.id}
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              minHeight: 0,
-              background: "#141414",
-              border: "1px solid #262626",
-              borderRadius: 10,
-              padding: 10,
-              gap: 8,
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "2px 4px" }}>
-              <span style={{ width: 8, height: 8, borderRadius: "50%", background: col.color }} />
-              <span style={{ fontSize: 11.5, fontWeight: 700, color: "#ccc", textTransform: "uppercase", letterSpacing: 0.4 }}>
-                {col.label}
-              </span>
-              <span style={{ fontSize: 11, color: "#666", marginLeft: "auto" }}>{count}</span>
+          return (
+            <div
+              key={col.id}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                minHeight: 90,
+                background: "#141414",
+                border: "1px solid #262626",
+                borderRadius: 10,
+                padding: 10,
+                gap: 8,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "2px 4px" }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: col.color }} />
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: "#ccc", textTransform: "uppercase", letterSpacing: 0.4 }}>
+                  {col.label}
+                </span>
+                <motion.span
+                  key={count}
+                  initial={{ scale: 1.4, opacity: 0.6 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  style={{ fontSize: 11, color: "#666", marginLeft: "auto" }}
+                >
+                  {count}
+                </motion.span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, overflowY: "auto", minHeight: 0 }}>
+                <AnimatePresence>
+                  {approvalsHere.map((a) => (
+                    <ApprovalCardCompact key={a.id} approval={a} onDecide={(approve) => onDecideApproval(a.id, approve)} />
+                  ))}
+                  {tasks.map((t) => (
+                    <TaskCard key={t.id} task={t} />
+                  ))}
+                </AnimatePresence>
+                {count === 0 && <div style={{ fontSize: 11, color: "#444", padding: "6px 2px" }}>Nothing here</div>}
+              </div>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, overflowY: "auto", minHeight: 0 }}>
-              {approvalsHere.map((a) => (
-                <ApprovalCardCompact key={a.id} approval={a} onDecide={(approve) => onDecideApproval(a.id, approve)} />
-              ))}
-              {tasks.map((t) => (
-                <TaskCard key={t.id} task={t} />
-              ))}
-              {count === 0 && <div style={{ fontSize: 11, color: "#444", padding: "6px 2px" }}>Nothing here</div>}
-            </div>
-          </div>
-        );
-      })}
-    </div>
+          );
+        })}
+      </div>
+    </LayoutGroup>
   );
 }

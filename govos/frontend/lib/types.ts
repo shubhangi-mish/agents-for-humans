@@ -28,6 +28,8 @@ export interface Approval {
   action_summary: string;
   amount_inr: number | null;
   status: "pending" | "approved" | "rejected";
+  authorized_by: string | null;
+  authority_tier: string | null;
   created_at: number;
   resolved_at: number | null;
 }
@@ -37,6 +39,7 @@ export interface Incident {
   title: string;
   scenario: string;
   location: string;
+  source_headline: string | null;
   severity: string;
   status: IncidentStatus;
   affected_wards: string[];

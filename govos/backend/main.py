@@ -46,17 +46,27 @@ AUTO_TRIGGER_ENABLED = os.getenv("GOVOS_AUTO_TRIGGER", "true").lower() == "true"
 AUTO_TRIGGER_INTERVAL_SECONDS = int(os.getenv("GOVOS_AUTO_TRIGGER_INTERVAL_SECONDS", "90"))
 
 # Real South Delhi locations to draw from for auto-generated incidents —
-# mirrors backend/data/wards.json.
+# mirrors backend/data/wards.json. Every entry gets its own location so
+# incidents actually spread across the map instead of clustering.
 AUTO_TRIGGER_POOL: list[dict[str, Any]] = [
     {"scenario": "building_collapse", "location": "Satya Niketan", "location_id": "satya-niketan"},
     {"scenario": "building_collapse", "location": "Hauz Khas", "location_id": "hauz-khas"},
     {"scenario": "building_collapse", "location": "Munirka", "location_id": "munirka"},
-    {"scenario": "flood", "zone": "South Delhi", "rainfall_intensity": "high", "expected_duration_hours": 4},
+    {"scenario": "building_collapse", "location": "Safdarjung Enclave", "location_id": "safdarjung-enclave"},
+    {"scenario": "flood", "location": "Sarojini Nagar", "location_id": "sarojini-nagar", "zone": "South Delhi", "rainfall_intensity": "high", "expected_duration_hours": 4},
+    {"scenario": "flood", "location": "Munirka", "location_id": "munirka", "zone": "South Delhi", "rainfall_intensity": "high", "expected_duration_hours": 4},
 ]
 
 USE_REAL_NEWS_SIGNAL = os.getenv("GOVOS_USE_REAL_NEWS", "true").lower() == "true"
+# India-wide (not Delhi-only) — a Delhi-specific building-collapse/flood
+# headline on any given day is rare, so narrowing to "Delhi" starved this of
+# matches almost every cycle. Broader search = the sim is actually grounded
+# in a real headline most of the time instead of silently falling back to
+# the synthetic pool. The real story's real location is never used for the
+# simulated response — only the scenario *type* (flood vs collapse) — so
+# this is safe to broaden without misrepresenting where a real event happened.
 NEWS_RSS_URL = (
-    "https://news.google.com/rss/search?q=Delhi%20(fire%20OR%20collapse%20OR%20flood%20OR%20building%20OR%20waterlogging)"
+    "https://news.google.com/rss/search?q=India%20(building%20collapse%20OR%20structure%20collapse%20OR%20flood%20OR%20waterlogging)"
     "&hl=en-IN&gl=IN&ceid=IN:en"
 )
 NEWS_LOCALITY_IDS = {
@@ -82,7 +92,7 @@ async def _fetch_real_news_trigger() -> dict[str, Any] | None:
             resp = await client.get(NEWS_RSS_URL)
         resp.raise_for_status()
         root = ET.fromstring(resp.text)
-        for item in root.findall(".//item")[:15]:
+        for item in root.findall(".//item")[:25]:
             title_el = item.find("title")
             if title_el is None or not title_el.text:
                 continue
@@ -96,7 +106,11 @@ async def _fetch_real_news_trigger() -> dict[str, Any] | None:
             else:
                 continue
 
-            location, location_id = "Satya Niketan", "satya-niketan"
+            # If the headline doesn't name one of our known localities,
+            # pick one at random rather than always defaulting to the same
+            # place — otherwise every unmatched headline piles up at Satya
+            # Niketan.
+            location, location_id = random.choice(list(NEWS_LOCALITY_IDS.values()))
             for needle, (name, loc_id) in NEWS_LOCALITY_IDS.items():
                 if needle in lower:
                     location, location_id = name, loc_id
@@ -240,6 +254,11 @@ class ApprovalDecision(BaseModel):
 
 @app.post("/incidents/{incident_id}/approve")
 async def approve(incident_id: str, decision: ApprovalDecision) -> dict[str, Any]:
+    """Field Command override. Every authorization the incident needed was
+    already resolved by the real office that holds it (see
+    incident_engine._policy_check) the moment it came up — this endpoint is
+    the rare veto path for a human watching to override that after the
+    fact, never something the incident waits on to proceed."""
     incident = store.get(incident_id)
     if incident is None:
         raise HTTPException(status_code=404, detail="incident not found")

@@ -1,0 +1,65 @@
+{
+  "_note": "Best-effort, simplified jurisdiction mapping for this simulation — real assembly/parliamentary constituency and police-district names, but boundary assignment to each seeded locality is approximate (not sourced from ceo.delhi.gov.in or Delhi Police records). Office/institution names are real; officer names are fictional placeholders, same convention as directory.json. Never used to contact anyone real.",
+  "wards": {
+    "satya-niketan": {
+      "assembly_constituency": "R.K. Puram",
+      "mla_office": "Office of the MLA, R.K. Puram",
+      "lok_sabha_constituency": "New Delhi",
+      "mp_office": "Office of the Member of Parliament, New Delhi",
+      "police_station": "PS R.K. Puram",
+      "police_district": "South West District",
+      "mcd_ward": "Satya Niketan Ward",
+      "mcd_zone": "MCD South Zone",
+      "djb_zone": "DJB South Zone (Malviya Nagar)",
+      "discom": "BSES Rajdhani Power Ltd (BRPL)"
+    },
+    "safdarjung-enclave": {
+      "assembly_constituency": "R.K. Puram",
+      "mla_office": "Office of the MLA, R.K. Puram",
+      "lok_sabha_constituency": "New Delhi",
+      "mp_office": "Office of the Member of Parliament, New Delhi",
+      "police_station": "PS Safdarjung Enclave",
+      "police_district": "South West District",
+      "mcd_ward": "Safdarjung Enclave Ward",
+      "mcd_zone": "MCD South Zone",
+      "djb_zone": "DJB South Zone (Malviya Nagar)",
+      "discom": "BSES Rajdhani Power Ltd (BRPL)"
+    },
+    "sarojini-nagar": {
+      "assembly_constituency": "R.K. Puram",
+      "mla_office": "Office of the MLA, R.K. Puram",
+      "lok_sabha_constituency": "New Delhi",
+      "mp_office": "Office of the Member of Parliament, New Delhi",
+      "police_station": "PS Sarojini Nagar",
+      "police_district": "South West District",
+      "mcd_ward": "Sarojini Nagar Ward",
+      "mcd_zone": "MCD South Zone",
+      "djb_zone": "DJB South Zone (Malviya Nagar)",
+      "discom": "BSES Rajdhani Power Ltd (BRPL)"
+    },
+    "munirka": {
+      "assembly_constituency": "R.K. Puram",
+      "mla_office": "Office of the MLA, R.K. Puram",
+      "lok_sabha_constituency": "New Delhi",
+      "mp_office": "Office of the Member of Parliament, New Delhi",
+      "police_station": "PS Vasant Vihar",
+      "police_district": "South West District",
+      "mcd_ward": "Munirka Ward",
+      "mcd_zone": "MCD South Zone",
+      "djb_zone": "DJB South West Zone",
+      "discom": "BSES Rajdhani Power Ltd (BRPL)"
+    },
+    "hauz-khas": {
+      "assembly_constituency": "Malviya Nagar",
+      "mla_office": "Office of the MLA, Malviya Nagar",
+      "lok_sabha_constituency": "New Delhi",
+      "mp_office": "Office of the Member of Parliament, New Delhi",
+      "police_station": "PS Hauz Khas",
+      "police_district": "South District",
+      "mcd_ward": "Hauz Khas Ward",
+      "mcd_zone": "MCD South Zone",
+      "djb_zone": "DJB South Zone (Malviya Nagar)",
+      "discom": "BSES Rajdhani Power Ltd (BRPL)"
+    }
+  }
+}

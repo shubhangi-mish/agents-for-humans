@@ -238,13 +238,14 @@ SIGNOFF_ACTOR_NAME = os.getenv("CALLE_SIGNOFF_ACTOR_NAME", "Chief Minister, Gove
 
 def _place_signoff_calls(incident: Incident) -> None:
     """Fires a real (or, unconfigured, dry-run) sign-off phone call for
-    every DDMA-tier approval this incident just auto-authorized — DDMA is
-    chaired by the Chief Minister, so this is a decision made in that
-    person's name before they've actually seen it. Fire-and-forget: the
-    incident already resolved itself autonomously: this call can only
-    confirm that stands or override it, never block or delay it."""
+    every approval this incident just auto-authorized — District
+    Magistrate tier, Police Commissioner tier, or DDMA — since for this
+    single-persona demo the CM is the one reachable authority for any of
+    them. Fire-and-forget: the incident already resolved itself
+    autonomously; this call can only confirm that stands or override it,
+    never block or delay it."""
     for approval in incident.approvals:
-        if approval.authority_tier and "DDMA" in approval.authority_tier and not approval.overridden_by:
+        if approval.authority_tier and not approval.overridden_by:
             asyncio.create_task(_run_signoff_call(incident.id, approval.id))
 
 
@@ -395,6 +396,9 @@ class CommentPayload(BaseModel):
     author: str
     author_role: str
     text: str
+    # Set to a real office name (see frontend/lib/officesDirectory.ts) to
+    # also place a real phone call notifying that office of the tag.
+    tagged_office: str | None = None
 
 
 @app.post("/incidents/{incident_id}/comments")
@@ -402,17 +406,57 @@ async def add_comment(incident_id: str, payload: CommentPayload) -> dict[str, An
     """Any signed-in authority can leave a note on an incident — it's
     appended to the incident's own record, so every other authority who
     opens this incident sees it too. No per-viewer visibility filtering:
-    a shared record is the point."""
+    a shared record is the point. Tagging an office also fires a real
+    phone call notifying them an urgent reply is wanted (fire-and-forget,
+    doesn't block the comment being saved)."""
     incident = store.get(incident_id)
     if incident is None:
         raise HTTPException(status_code=404, detail="incident not found")
 
-    comment = Comment(author=payload.author, author_role=payload.author_role, text=payload.text)
+    comment = Comment(
+        author=payload.author, author_role=payload.author_role, text=payload.text,
+        tagged_office=payload.tagged_office,
+    )
     incident.comments.append(comment)
     incident.updated_at = comment.created_at
     store.save(incident)
     _broadcast(incident, {"type": "state", "phase": "comment", "incident": json.loads(incident.model_dump_json())})
+
+    if payload.tagged_office:
+        asyncio.create_task(_run_tag_notification_call(incident_id, comment.id))
+
     return json.loads(incident.model_dump_json())
+
+
+async def _run_tag_notification_call(incident_id: str, comment_id: str) -> None:
+    incident = store.get(incident_id)
+    if incident is None:
+        return
+    comment = next((c for c in incident.comments if c.id == comment_id), None)
+    if comment is None or not comment.tagged_office:
+        return
+
+    result = await signoff_call.request_tag_notification_call(
+        tagger_name=comment.author,
+        incident_id=incident_id,
+        comment_id=comment_id,
+        incident_title=incident.title,
+        tagged_office=comment.tagged_office,
+        comment_text=comment.text,
+    )
+    logger.info(
+        "Tag notification call for %s/%s -> acknowledged=%s%s",
+        incident_id, comment_id, result["acknowledged"], " (dry run)" if result["dry_run"] else "",
+    )
+
+    note = (
+        f"Tag call to {comment.tagged_office} — "
+        + ("acknowledged" if result["acknowledged"] else "no clear acknowledgement")
+        + (f": {result['reply_notes']}" if result.get("reply_notes") else "")
+    )
+    incident.log("system", "tag_notification", note, comment_id=comment_id, tagged_office=comment.tagged_office)
+    store.save(incident)
+    _broadcast(incident, {"type": "state", "phase": "tag_notification", "incident": json.loads(incident.model_dump_json())})
 
 
 # City-wide directives — a signed-in authority messaging a specific real

@@ -46,6 +46,7 @@ export interface Comment {
   author: string;
   author_role: string;
   text: string;
+  tagged_office: string | null;
   created_at: number;
 }
 

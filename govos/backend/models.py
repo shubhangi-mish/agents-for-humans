@@ -80,6 +80,10 @@ class Comment(BaseModel):
     author: str
     author_role: str
     text: str
+    # Set when this comment tags a specific office/person for an urgent
+    # reply — triggers a real phone call notifying them (see
+    # agents.signoff_call.request_tag_notification_call).
+    tagged_office: Optional[str] = None
     created_at: float = Field(default_factory=now)
 
 

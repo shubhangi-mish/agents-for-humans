@@ -177,12 +177,13 @@ export async function postComment(
   incidentId: string,
   author: string,
   authorRole: string,
-  text: string
+  text: string,
+  taggedOffice: string | null = null
 ): Promise<Incident> {
   const res = await fetch(`${API}/incidents/${incidentId}/comments`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ author, author_role: authorRole, text }),
+    body: JSON.stringify({ author, author_role: authorRole, text, tagged_office: taggedOffice }),
   });
   if (!res.ok) throw new Error(`comment failed: ${res.status}`);
   return res.json();

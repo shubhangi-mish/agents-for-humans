@@ -8,3 +8,6 @@ backend/.env
 node_modules/
 .next/
 frontend/.env.local
+
+backend/backend.log
+frontend/frontend.log

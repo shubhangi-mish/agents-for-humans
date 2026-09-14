@@ -14,7 +14,7 @@ export default function OfficeSections({ incident }: { incident: Incident }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 16 }}>
         <div style={{ fontSize: 12, color: "#777", textTransform: "uppercase", letterSpacing: 0.5 }}>
-          Real jurisdiction — resolving automatically
+          Authorities informed &amp; decisions taken
         </div>
         <div style={{ fontSize: 9.5, color: "#6bbf7b", border: "1px solid #6bbf7b44", borderRadius: 4, padding: "1px 6px" }}>
           No human sign-off required

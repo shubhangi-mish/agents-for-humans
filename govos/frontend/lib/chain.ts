@@ -14,6 +14,8 @@ interface Jurisdiction {
   mla_office: string;
   lok_sabha_constituency: string;
   mp_office: string;
+  sdm_subdivision: string;
+  sdm_office: string;
   police_station: string;
   police_district: string;
   mcd_ward: string;
@@ -30,6 +32,7 @@ function findLast(events: GovEvent[], pred: (e: GovEvent) => boolean): GovEvent 
 }
 
 function officerFor(office: string): string {
+  if (office.includes("SDM")) return "Sub-Divisional Magistrate on duty";
   if (office.includes("District Magistrate")) return "Duty Officer S. Verma";
   if (office.includes("Commissioner of Police")) return "Coordination Officer V. Menon";
   if (office.includes("DDMA")) return "Situation Officer M. Iyer";
@@ -41,7 +44,7 @@ function officerFor(office: string): string {
 function eyebrowFor(office: string): string {
   if (office.includes("Commissioner of Police") || office.startsWith("PS ")) return "DELHI POLICE";
   if (office.includes("MLA") || office.includes("DDMA")) return "GOVERNMENT OF NCT OF DELHI";
-  if (office.includes("District Magistrate")) return "GNCTD — REVENUE DEPARTMENT";
+  if (office.includes("SDM") || office.includes("District Magistrate")) return "GNCTD — REVENUE DEPARTMENT";
   return "MUNICIPAL CORPORATION OF DELHI";
 }
 
@@ -84,6 +87,15 @@ export function buildChain(incident: Incident): OfficeNode[] {
   });
 
   if (jurisdiction) {
+    chain.push({
+      id: "sdm-office",
+      office: jurisdiction.sdm_office,
+      officer: officerFor(jurisdiction.sdm_office),
+      role: `SDM, ${jurisdiction.sdm_subdivision} subdivision`,
+      eyebrow: "GNCTD — REVENUE DEPARTMENT",
+      message: `On-ground coordination briefing received for ${incident.affected_wards.join(", ")}.`,
+    });
+
     chain.push({
       id: "mla-office",
       office: jurisdiction.mla_office,

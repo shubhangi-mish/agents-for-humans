@@ -3,7 +3,9 @@
 import { useState } from "react";
 import CityMap from "@/components/CityMap";
 import EventStream from "@/components/EventStream";
+import IncidentSummary from "@/components/IncidentSummary";
 import KanbanBoard from "@/components/KanbanBoard";
+import NewsDetail from "@/components/NewsDetail";
 import NewsFeed from "@/components/NewsFeed";
 import OfficeSections from "@/components/OfficeSections";
 import { resolveApproval, useEventStream, useIncidentList, useNewsFeed } from "@/lib/useEventStream";
@@ -31,6 +33,7 @@ export default function Page() {
   const incidents = useIncidentList();
   const newsItems = useNewsFeed();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedNewsId, setSelectedNewsId] = useState<string | null>(null);
   const incident = useEventStream(selectedId);
 
   async function handleDecideApproval(approvalId: string, approve: boolean) {
@@ -38,11 +41,26 @@ export default function Page() {
     await resolveApproval(incident.id, approvalId, approve);
   }
 
+  function selectIncident(id: string) {
+    setSelectedNewsId(null);
+    setSelectedId(id);
+  }
+
+  function selectNews(id: string) {
+    setSelectedId(null);
+    setSelectedNewsId(id);
+  }
+
+  const selectedNewsItem = selectedNewsId ? newsItems.find((n) => n.id === selectedNewsId) : undefined;
+  if (selectedNewsItem) {
+    return <NewsDetail item={selectedNewsItem} onBack={() => setSelectedNewsId(null)} />;
+  }
+
   if (!selectedId || !incident) {
     return (
       <main style={{ height: "100vh", width: "100vw", display: "flex" }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <CityMap incidents={incidents} newsItems={newsItems} onSelect={setSelectedId} />
+          <CityMap incidents={incidents} newsItems={newsItems} onSelectIncident={selectIncident} onSelectNews={selectNews} />
         </div>
         <NewsFeed items={newsItems} />
       </main>
@@ -103,21 +121,25 @@ export default function Page() {
       )}
       </header>
 
-      <div style={{ maxWidth: 820, margin: "0 auto", padding: "24px 20px 20px" }}>
-        <OfficeSections key={incident.id} incident={incident} />
-      </div>
+      <div style={{ maxWidth: 900, margin: "0 auto", padding: "20px 20px 60px", display: "flex", flexDirection: "column", gap: 20 }}>
+        <section style={SECTION}>
+          <IncidentSummary key={incident.id} incident={incident} />
+        </section>
 
-      <div style={{ padding: "20px 32px 60px", display: "flex", flexDirection: "column", gap: 20 }}>
+        <section style={SECTION}>
+          <OfficeSections key={incident.id} incident={incident} />
+        </section>
+
         <section style={SECTION}>
           <div style={{ fontSize: 12, color: "#777", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 14 }}>
-            Field tasks
+            Resources deployed
           </div>
           <KanbanBoard key={incident.id} incident={incident} onDecideApproval={handleDecideApproval} />
         </section>
 
         <section style={SECTION}>
           <div style={{ fontSize: 12, color: "#777", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>
-            Activity
+            Full activity log
           </div>
           <div style={{ maxHeight: 260, overflowY: "auto" }}>
             <EventStream events={incident.events} />

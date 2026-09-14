@@ -1,0 +1,22 @@
+{
+  "_note": "Delhi's real revenue-district structure — district names match what OpenStreetMap/Nominatim actually returns for a Delhi coordinate's `address.state_district` (verified live), so any geocoded point in Delhi maps onto one of these without guessing ward boundaries. District Magistrate and DCP office titles are real, stable structure (every Delhi revenue district has both). MCD zone alignment per district is an approximate best-effort pairing — MCD zones are the Municipal Corporation's own administrative division and don't align 1:1 with revenue-district boundaries — treat it as indicative, not authoritative. Office names are real; officer names are fictional placeholders, same convention as directory.json/jurisdictions.json. Never used to contact anyone real.",
+  "top": {
+    "cm_office": "Chief Minister's Office, Government of NCT of Delhi",
+    "ddma": "Delhi Disaster Management Authority (DDMA) — chaired by the Chief Minister",
+    "lg_office": "Office of the Lieutenant Governor of Delhi (Raj Niwas) — constitutional authority over Delhi Police, public order and land under the GNCTD Act",
+    "police_commissioner": "Office of the Commissioner of Police, Delhi"
+  },
+  "districts": {
+    "Central Delhi": { "dm_office": "District Magistrate (Deputy Commissioner), Central District", "dcp_office": "DCP, Central District, Delhi Police", "mcd_zone": "MCD City-Sadar-Paharganj Zone" },
+    "North Delhi": { "dm_office": "District Magistrate (Deputy Commissioner), North District", "dcp_office": "DCP, North District, Delhi Police", "mcd_zone": "MCD Civil Lines Zone" },
+    "North East Delhi": { "dm_office": "District Magistrate (Deputy Commissioner), North East District", "dcp_office": "DCP, North East District, Delhi Police", "mcd_zone": "MCD Shahdara North Zone" },
+    "East Delhi": { "dm_office": "District Magistrate (Deputy Commissioner), East District", "dcp_office": "DCP, East District, Delhi Police", "mcd_zone": "MCD Shahdara South Zone" },
+    "Shahdara": { "dm_office": "District Magistrate (Deputy Commissioner), Shahdara District", "dcp_office": "DCP, Shahdara District, Delhi Police", "mcd_zone": "MCD Shahdara North Zone" },
+    "New Delhi": { "dm_office": "District Magistrate (Deputy Commissioner), New Delhi District", "dcp_office": "DCP, New Delhi District, Delhi Police", "mcd_zone": "New Delhi Municipal Council (NDMC) — administered separately from MCD" },
+    "North West Delhi": { "dm_office": "District Magistrate (Deputy Commissioner), North West District", "dcp_office": "DCP, North West District, Delhi Police", "mcd_zone": "MCD Rohini Zone" },
+    "West Delhi": { "dm_office": "District Magistrate (Deputy Commissioner), West District", "dcp_office": "DCP, West District, Delhi Police", "mcd_zone": "MCD West Zone" },
+    "South West Delhi": { "dm_office": "District Magistrate (Deputy Commissioner), South West District", "dcp_office": "DCP, South West District, Delhi Police", "mcd_zone": "MCD Najafgarh Zone" },
+    "South Delhi": { "dm_office": "District Magistrate (Deputy Commissioner), South District", "dcp_office": "DCP, South District, Delhi Police", "mcd_zone": "MCD South Zone" },
+    "South East Delhi": { "dm_office": "District Magistrate (Deputy Commissioner), South East District", "dcp_office": "DCP, South East District, Delhi Police", "mcd_zone": "MCD Central Zone" }
+  }
+}

@@ -16,9 +16,11 @@ geocoded to where it actually happened.
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 import xml.etree.ElementTree as ET
+from pathlib import Path
 from typing import Any, Callable
 
 import httpx
@@ -29,6 +31,13 @@ from agents.base import run_agent_turn
 from models import new_id
 
 logger = logging.getLogger("govos.news")
+
+# Persists seen-links + recent items across restarts — without this, every
+# `uvicorn` restart during dev forgets what it already broadcast and
+# re-announces the same ~30 real headlines as "new" again, which (a) wastes
+# LLM/geocoding calls re-processing headlines it's already extracted, and
+# (b) piles up duplicate pins at the same coordinate on the frontend map.
+STATE_FILE = Path(__file__).parent / ".local_state" / "news_feed_state.json"
 
 # Broad Delhi incident coverage — not limited to the response engine's two
 # simulated scenarios. Excludes a couple of noisy unrelated categories that
@@ -71,6 +80,35 @@ class NewsItem(BaseModel):
     lat: float | None = None
     lng: float | None = None
     fetched_at: float = Field(default_factory=time.time)
+
+
+def _load_state() -> None:
+    if not STATE_FILE.exists():
+        return
+    try:
+        data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        _seen_links.update(data.get("seen_links", []))
+        _recent_items.extend(NewsItem.model_validate(item) for item in data.get("recent_items", []))
+        del _recent_items[:-MAX_RECENT]
+    except Exception:
+        logger.exception("Failed to load persisted news feed state — starting fresh")
+
+
+def _save_state() -> None:
+    try:
+        STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        STATE_FILE.write_text(
+            json.dumps({
+                "seen_links": list(_seen_links)[-500:],
+                "recent_items": [json.loads(i.model_dump_json()) for i in _recent_items],
+            }),
+            encoding="utf-8",
+        )
+    except Exception:
+        logger.exception("Failed to persist news feed state")
+
+
+_load_state()
 
 
 def _classify_kind(headline: str) -> str:
@@ -175,6 +213,9 @@ async def poll_once(broadcast: Callable[["NewsItem"], None]) -> int:
         _recent_items.append(news_item)
         del _recent_items[:-MAX_RECENT]
         broadcast(news_item)
+
+    if new_count:
+        _save_state()
 
     return new_count
 

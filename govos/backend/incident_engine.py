@@ -134,8 +134,9 @@ async def run_intel_phase(incident: Incident, trigger: dict) -> None:
             "intel_agent",
             "jurisdiction",
             f"Jurisdiction identified — {jurisdiction['police_station']} ({jurisdiction['police_district']}); "
-            f"{jurisdiction['mcd_ward']} ({jurisdiction['mcd_zone']}); {jurisdiction['mla_office']}; "
-            f"{jurisdiction['mp_office']}. Local representatives and station briefed automatically.",
+            f"{jurisdiction['mcd_ward']} ({jurisdiction['mcd_zone']}); {jurisdiction['sdm_office']}; "
+            f"{jurisdiction['mla_office']}; {jurisdiction['mp_office']}. Local representatives, the "
+            "sub-divisional magistrate, and the station have been briefed automatically.",
             jurisdiction=jurisdiction,
         )
 

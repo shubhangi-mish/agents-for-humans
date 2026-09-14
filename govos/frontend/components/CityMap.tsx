@@ -15,11 +15,13 @@ const CityMapInner = dynamic(() => import("./CityMapInner"), {
 export default function CityMap({
   incidents,
   newsItems,
-  onSelect,
+  onSelectIncident,
+  onSelectNews,
 }: {
   incidents: Incident[];
   newsItems: NewsItem[];
-  onSelect: (incidentId: string) => void;
+  onSelectIncident: (incidentId: string) => void;
+  onSelectNews: (newsId: string) => void;
 }) {
   const open = incidents.filter((i) => i.status !== "resolved");
   const resolved = incidents.filter((i) => i.status === "resolved");
@@ -29,7 +31,7 @@ export default function CityMap({
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      <CityMapInner incidents={incidents} newsItems={newsItems} onSelect={onSelect} />
+      <CityMapInner incidents={incidents} newsItems={newsItems} onSelectIncident={onSelectIncident} onSelectNews={onSelectNews} />
 
       <div
         style={{
@@ -81,6 +83,7 @@ export default function CityMap({
         <span><span style={{ color: "#5b9dd9" }}>●</span> In progress</span>
         <span><span style={{ color: "#e0b34d" }}>●</span> Awaiting approval</span>
         <span><span style={{ color: "#6bbf7b" }}>●</span> Resolved</span>
+        <span><span style={{ color: "#9a9a9a" }}>●</span> Real news, unprocessed</span>
       </div>
 
       {open.length === 0 && (

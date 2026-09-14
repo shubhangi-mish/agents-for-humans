@@ -2,17 +2,10 @@
 
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
+import { MapContainer, Marker, Tooltip, TileLayer } from "react-leaflet";
 import { Incident, NewsItem } from "@/lib/types";
 import { DELHI_CENTER, REAL_LOCATIONS } from "@/lib/geo";
 import { TILE_ATTRIBUTION, TILE_OPTIONS, TILE_URL } from "@/lib/mapTiles";
-import { NEWS_KIND_ICON } from "@/lib/newsKind";
-
-const STATUS_COLOR: Record<Incident["status"], string> = {
-  active: "#5b9dd9",
-  paused_for_approval: "#e0b34d",
-  resolved: "#6bbf7b",
-};
 
 const STATUS_LABEL: Record<Incident["status"], string> = {
   active: "In progress",
@@ -20,110 +13,117 @@ const STATUS_LABEL: Record<Incident["status"], string> = {
   resolved: "Resolved",
 };
 
-const SCENARIO_ICON: Record<string, string> = {
-  building_collapse: "🏚️",
-  flood: "🌊",
+// One pin shape for everything on the map — an incident and a real news
+// report look the same at a glance, only the color (status) and the pulse
+// (still live vs. settled) differ. No per-scenario or per-kind icon variety.
+const PIN_COLOR: Record<string, string> = {
+  active: "#5b9dd9",
+  paused_for_approval: "#e0b34d",
+  resolved: "#6bbf7b",
+  news: "#9a9a9a",
 };
 
-// A real map-pin (teardrop) shape — unmistakably "an active trigger point",
-// never confusable with the small static landmark dots. Real-news-sourced
-// incidents get a small 📰 badge so it's visually obvious which pins are
-// grounded in an actual headline vs. the synthetic filler pool.
-function pinIcon(scenario: string, color: string, pulsing: boolean, fromRealNews: boolean) {
+type MapPin =
+  | { id: string; kind: "incident"; lat: number; lng: number; title: string; subtitle: string; status: Incident["status"]; ref: Incident }
+  | { id: string; kind: "news"; lat: number; lng: number; title: string; subtitle: string; status: "news"; ref: NewsItem };
+
+function uniformPinIcon(color: string, pulsing: boolean) {
   return L.divIcon({
     className: "govos-div-icon",
     html: `
-      <div style="position:relative;width:36px;height:44px;">
+      <div style="position:relative;width:26px;height:32px;">
         ${pulsing ? `<div class="govos-city-pulse" style="border-color:${color}"></div>` : ""}
         <div style="
-            position:absolute; left:3px; top:0; width:30px; height:30px;
+            position:absolute; left:3px; top:0; width:20px; height:20px;
             background:${color}; border:2px solid #0b0d0f;
             border-radius:50% 50% 50% 0; transform:rotate(-45deg);
             box-shadow:0 3px 8px rgba(0,0,0,.6);
           "></div>
         <div style="
-            position:absolute; left:3px; top:0; width:30px; height:30px;
+            position:absolute; left:3px; top:0; width:20px; height:20px;
             display:flex; align-items:center; justify-content:center;
-            font-size:15px;
-          ">${SCENARIO_ICON[scenario] ?? "🚨"}</div>
-        ${fromRealNews ? `
-        <div style="
-            position:absolute; right:-4px; top:-4px; width:16px; height:16px;
-            border-radius:50%; background:#161616; border:1px solid #555;
-            display:flex; align-items:center; justify-content:center;
-            font-size:9px;
-          " title="Sourced from a real news headline">📰</div>` : ""}
+          ">
+          <div style="width:7px;height:7px;border-radius:50%;background:#0b0d0f;"></div>
+        </div>
       </div>
     `,
-    iconSize: [36, 44],
-    iconAnchor: [18, 40],
-    popupAnchor: [0, -38],
+    iconSize: [26, 32],
+    iconAnchor: [13, 28],
+    popupAnchor: [0, -26],
   });
 }
 
-// A live news pin is deliberately smaller and quieter than an active-incident
-// pin — it's a real report the response engine hasn't necessarily acted on,
-// not a confirmed simulated incident. The kind emoji is the only thing that
-// changes per story.
-function newsIcon(kind: NewsItem["kind"]) {
-  return L.divIcon({
-    className: "govos-div-icon",
-    html: `
-      <div style="
-          width:22px;height:22px;border-radius:50%;
-          background:#161616cc; border:1.5px solid #d4af3799;
-          display:flex;align-items:center;justify-content:center;
-          font-size:11px; box-shadow:0 2px 6px rgba(0,0,0,.5);
-        ">${NEWS_KIND_ICON[kind]}</div>
-    `,
-    iconSize: [22, 22],
-    iconAnchor: [11, 11],
-    popupAnchor: [0, -10],
-  });
-}
-
-function landmarkIcon(kind: string) {
-  const color = kind === "hospital" ? "#7a3b3b" : kind === "base" ? "#3a4a40" : "#3a3a3a";
-  return L.divIcon({
-    className: "govos-div-icon",
-    html: `<div style="width:5px;height:5px;border-radius:50%;background:${color};opacity:0.7;"></div>`,
-    iconSize: [5, 5],
-    iconAnchor: [2.5, 2.5],
-  });
-}
-
-// Fans concurrent incidents at (almost) the same coordinate out into a
-// small ring so they don't render exactly stacked on top of each other.
-function fanOut(incidents: Incident[]): { incident: Incident; lat: number; lng: number }[] {
-  const groups = new Map<string, Incident[]>();
-  for (const inc of incidents) {
-    const loc = REAL_LOCATIONS[inc.location];
-    const key = loc ? `${loc.lat.toFixed(3)},${loc.lng.toFixed(3)}` : "unknown";
-    groups.set(key, [...(groups.get(key) ?? []), inc]);
+// Fans concurrent pins at (almost) the same coordinate out into a small ring
+// so they don't render exactly stacked on top of each other.
+function fanOut(pins: Omit<MapPin, "lat" | "lng">[], coords: (p: Omit<MapPin, "lat" | "lng">) => { lat: number; lng: number }): MapPin[] {
+  const groups = new Map<string, Omit<MapPin, "lat" | "lng">[]>();
+  for (const p of pins) {
+    const c = coords(p);
+    const key = `${c.lat.toFixed(3)},${c.lng.toFixed(3)}`;
+    groups.set(key, [...(groups.get(key) ?? []), p]);
   }
-  const out: { incident: Incident; lat: number; lng: number }[] = [];
+  const out: MapPin[] = [];
   for (const group of groups.values()) {
-    group.forEach((inc, i) => {
-      const loc = REAL_LOCATIONS[inc.location] ?? { lat: DELHI_CENTER[0], lng: DELHI_CENTER[1] };
+    group.forEach((p, i) => {
+      const c = coords(p);
       const angle = (i / Math.max(group.length, 1)) * 2 * Math.PI;
       const fan = group.length > 1 ? 0.0035 : 0;
-      out.push({ incident: inc, lat: loc.lat + Math.sin(angle) * fan, lng: loc.lng + Math.cos(angle) * fan });
+      out.push({ ...p, lat: c.lat + Math.sin(angle) * fan, lng: c.lng + Math.cos(angle) * fan } as MapPin);
     });
   }
   return out;
 }
 
+/** Merges simulated incidents and real geocoded news into one pin list. A
+ * news item whose headline matches an incident's source_headline is
+ * dropped — that story already has a full simulated pin, showing both would
+ * just be the same real event marked twice. */
+function buildPins(incidents: Incident[], newsItems: NewsItem[]): MapPin[] {
+  const incidentHeadlines = new Set(incidents.map((i) => i.source_headline).filter(Boolean));
+
+  const incidentPins: Omit<MapPin, "lat" | "lng">[] = incidents
+    .filter((i) => REAL_LOCATIONS[i.location])
+    .map((i) => ({
+      id: i.id,
+      kind: "incident" as const,
+      title: i.title,
+      subtitle: STATUS_LABEL[i.status],
+      status: i.status,
+      ref: i,
+    }));
+
+  const newsPins: Omit<MapPin, "lat" | "lng">[] = newsItems
+    .filter((n) => n.lat != null && n.lng != null && !incidentHeadlines.has(n.headline))
+    .map((n) => ({
+      id: n.id,
+      kind: "news" as const,
+      title: n.headline,
+      subtitle: n.locality ? `Reported near ${n.locality}` : "Real news report",
+      status: "news" as const,
+      ref: n,
+    }));
+
+  const coords = (p: Omit<MapPin, "lat" | "lng">) => {
+    if (p.kind === "incident") return REAL_LOCATIONS[(p.ref as Incident).location] ?? { lat: DELHI_CENTER[0], lng: DELHI_CENTER[1] };
+    const n = p.ref as NewsItem;
+    return { lat: n.lat as number, lng: n.lng as number };
+  };
+
+  return fanOut([...incidentPins, ...newsPins], coords);
+}
+
 export default function CityMapInner({
   incidents,
   newsItems,
-  onSelect,
+  onSelectIncident,
+  onSelectNews,
 }: {
   incidents: Incident[];
   newsItems: NewsItem[];
-  onSelect: (id: string) => void;
+  onSelectIncident: (id: string) => void;
+  onSelectNews: (id: string) => void;
 }) {
-  const pins = fanOut(incidents);
-  const geocodedNews = newsItems.filter((n): n is NewsItem & { lat: number; lng: number } => n.lat != null && n.lng != null);
+  const pins = buildPins(incidents, newsItems);
 
   return (
     <MapContainer
@@ -140,38 +140,21 @@ export default function CityMapInner({
         {...TILE_OPTIONS}
       />
 
-      {Object.entries(REAL_LOCATIONS).map(([name, loc]) => (
-        <Marker key={name} position={[loc.lat, loc.lng]} icon={landmarkIcon(loc.kind)}>
-          <Popup>{name}</Popup>
-        </Marker>
-      ))}
-
-      {pins.map(({ incident, lat, lng }) => (
+      {pins.map((pin) => (
         <Marker
-          key={incident.id}
-          position={[lat, lng]}
-          icon={pinIcon(incident.scenario, STATUS_COLOR[incident.status], incident.status !== "resolved", !!incident.source_headline)}
-          eventHandlers={{ click: () => onSelect(incident.id) }}
+          key={pin.id}
+          position={[pin.lat, pin.lng]}
+          icon={uniformPinIcon(PIN_COLOR[pin.status], pin.status !== "resolved")}
+          eventHandlers={{
+            click: () => (pin.kind === "incident" ? onSelectIncident(pin.id) : onSelectNews(pin.id)),
+          }}
         >
-          <Popup>
-            <div style={{ fontWeight: 600 }}>{incident.title}</div>
-            <div>{STATUS_LABEL[incident.status]}</div>
-            {incident.source_headline && (
-              <div style={{ marginTop: 4, fontSize: 11, color: "#555" }}>📰 {incident.source_headline}</div>
-            )}
-          </Popup>
-        </Marker>
-      ))}
-
-      {geocodedNews.map((item) => (
-        <Marker key={item.id} position={[item.lat, item.lng]} icon={newsIcon(item.kind)}>
-          <Popup>
-            <div style={{ fontWeight: 600, fontSize: 12 }}>{item.headline}</div>
-            {item.locality && <div style={{ fontSize: 11, color: "#555", marginTop: 3 }}>📍 {item.locality}</div>}
-            <a href={item.link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11 }}>
-              Read source →
-            </a>
-          </Popup>
+          <Tooltip direction="top" offset={[0, -26]} opacity={0.97}>
+            <div style={{ maxWidth: 220 }}>
+              <div style={{ fontWeight: 700, fontSize: 12 }}>{pin.title}</div>
+              <div style={{ fontSize: 11, color: "#666", marginTop: 2 }}>{pin.subtitle}</div>
+            </div>
+          </Tooltip>
         </Marker>
       ))}
     </MapContainer>

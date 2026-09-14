@@ -2,15 +2,25 @@
 
 import dynamic from "next/dynamic";
 import { Incident, NewsItem } from "@/lib/types";
+import { theme } from "@/lib/theme";
 
 const CityMapInner = dynamic(() => import("./CityMapInner"), {
   ssr: false,
   loading: () => (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#555", fontSize: 13 }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: theme.textMuted, fontSize: 13 }}>
       Loading map…
     </div>
   ),
 });
+
+const OVERLAY: React.CSSProperties = {
+  position: "absolute",
+  zIndex: 1000,
+  background: `${theme.panel}f2`,
+  border: `1px solid ${theme.border}`,
+  borderRadius: 8,
+  pointerEvents: "none",
+};
 
 export default function CityMap({
   incidents,
@@ -33,74 +43,38 @@ export default function CityMap({
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
       <CityMapInner incidents={incidents} newsItems={newsItems} onSelectIncident={onSelectIncident} onSelectNews={onSelectNews} />
 
-      <div
-        style={{
-          position: "absolute",
-          top: 14,
-          left: 14,
-          zIndex: 1000,
-          background: "#141414ee",
-          border: "1px solid #262626",
-          borderRadius: 8,
-          padding: "8px 12px",
-          pointerEvents: "none",
-          display: "flex",
-          alignItems: "center",
-          gap: 16,
-        }}
-      >
+      <div style={{ ...OVERLAY, top: 14, left: 14, padding: "9px 14px", display: "flex", alignItems: "center", gap: 18 }}>
         <div>
-          <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: 0.5 }}>GOVOS</div>
-          <div style={{ fontSize: 11, color: "#888" }}>
+          <div style={{ fontSize: 13.5, fontWeight: 700, letterSpacing: 0.4, color: theme.textPrimary }}>GOVOS</div>
+          <div style={{ fontSize: 10.5, color: theme.textSecondary }}>
             {open.length} active incident{open.length === 1 ? "" : "s"} · {resolved.length} resolved
           </div>
         </div>
-        <div style={{ borderLeft: "1px solid #333", paddingLeft: 16, textAlign: "center" }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: "#d4af37" }}>{officesEngaged}</div>
-          <div style={{ fontSize: 9, color: "#888", textTransform: "uppercase", letterSpacing: 0.4, whiteSpace: "nowrap" }}>
+        <div style={{ borderLeft: `1px solid ${theme.border}`, paddingLeft: 18, textAlign: "center" }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: theme.accent }}>{officesEngaged}</div>
+          <div style={{ fontSize: 8.5, color: theme.textMuted, textTransform: "uppercase", letterSpacing: 0.4, whiteSpace: "nowrap" }}>
             Offices engaged
           </div>
         </div>
       </div>
 
-      <div
-        style={{
-          position: "absolute",
-          bottom: 14,
-          left: 14,
-          zIndex: 1000,
-          background: "#141414ee",
-          border: "1px solid #262626",
-          borderRadius: 8,
-          padding: "6px 12px",
-          display: "flex",
-          gap: 12,
-          fontSize: 11,
-          color: "#aaa",
-          pointerEvents: "none",
-        }}
-      >
-        <span><span style={{ color: "#5b9dd9" }}>●</span> In progress</span>
-        <span><span style={{ color: "#e0b34d" }}>●</span> Awaiting approval</span>
-        <span><span style={{ color: "#6bbf7b" }}>●</span> Resolved</span>
-        <span><span style={{ color: "#9a9a9a" }}>●</span> Real news, unprocessed</span>
+      <div style={{ ...OVERLAY, bottom: 14, left: 14, padding: "7px 12px", display: "flex", gap: 12, fontSize: 10.5, color: theme.textSecondary }}>
+        <span><span style={{ color: theme.statusActive }}>●</span> In progress</span>
+        <span><span style={{ color: theme.statusAwaiting }}>●</span> Awaiting approval</span>
+        <span><span style={{ color: theme.statusResolved }}>●</span> Resolved</span>
+        <span><span style={{ color: theme.statusNews }}>●</span> Real news, unprocessed</span>
       </div>
 
       {open.length === 0 && (
         <div
           style={{
-            position: "absolute",
+            ...OVERLAY,
             top: "50%",
             left: "50%",
             transform: "translate(-50%, -50%)",
-            zIndex: 1000,
-            color: "#888",
-            fontSize: 13,
-            background: "#141414ee",
-            border: "1px solid #262626",
-            borderRadius: 8,
+            color: theme.textSecondary,
+            fontSize: 12.5,
             padding: "8px 14px",
-            pointerEvents: "none",
           }}
         >
           No active incidents right now — the city is quiet.

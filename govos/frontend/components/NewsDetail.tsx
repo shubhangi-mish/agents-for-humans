@@ -1,11 +1,13 @@
 import { NewsItem } from "@/lib/types";
 import { NEWS_KIND_COLOR, NEWS_KIND_ICON } from "@/lib/newsKind";
+import { theme } from "@/lib/theme";
+import DistrictGraph from "./DistrictGraph";
 
 const SECTION: React.CSSProperties = {
-  background: "#141414",
-  border: "1px solid #262626",
-  borderRadius: 12,
-  padding: 20,
+  background: theme.panel,
+  border: `1px solid ${theme.border}`,
+  borderRadius: 10,
+  padding: 22,
 };
 
 /** The click-through page for a real news pin that isn't (yet) a simulated
@@ -15,31 +17,31 @@ const SECTION: React.CSSProperties = {
  * simulation is handling. */
 export default function NewsDetail({ item, onBack }: { item: NewsItem; onBack: () => void }) {
   return (
-    <main style={{ minHeight: "100vh", background: "#0d0d0d" }}>
+    <main style={{ minHeight: "100vh", background: theme.bg }}>
       <header
         style={{
           position: "sticky",
           top: 0,
           zIndex: 10,
-          background: "#0d0d0dee",
+          background: `${theme.bg}ee`,
           backdropFilter: "blur(6px)",
-          borderBottom: "1px solid #262626",
+          borderBottom: `1px solid ${theme.border}`,
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          padding: "14px 24px",
+          padding: "16px 28px",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: 0.5 }}>{NEWS_KIND_ICON[item.kind]} {item.headline}</span>
+          <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: 0.2, color: theme.textPrimary }}>{NEWS_KIND_ICON[item.kind]} {item.headline}</span>
           <span
             style={{
-              fontSize: 10.5,
+              fontSize: 10,
               color: NEWS_KIND_COLOR[item.kind],
-              border: `1px solid ${NEWS_KIND_COLOR[item.kind]}66`,
+              border: `1px solid ${NEWS_KIND_COLOR[item.kind]}55`,
               borderRadius: 4,
               padding: "2px 8px",
-              fontWeight: 700,
+              fontWeight: 600,
               letterSpacing: 0.3,
               textTransform: "uppercase",
             }}
@@ -49,43 +51,47 @@ export default function NewsDetail({ item, onBack }: { item: NewsItem; onBack: (
         </div>
         <button
           onClick={onBack}
-          style={{ background: "#1a1a1a", color: "#bbb", border: "1px solid #333", borderRadius: 6, padding: "7px 14px", cursor: "pointer", fontSize: 12 }}
+          style={{ background: theme.bgElevated, color: theme.textSecondary, border: `1px solid ${theme.border}`, borderRadius: 6, padding: "7px 14px", cursor: "pointer", fontSize: 12 }}
         >
           ← Back to city map
         </button>
       </header>
 
-      <div style={{ maxWidth: 720, margin: "0 auto", padding: "24px 20px 60px", display: "flex", flexDirection: "column", gap: 20 }}>
+      <div style={{ maxWidth: 860, margin: "0 auto", padding: "24px 20px 60px", display: "flex", flexDirection: "column", gap: 20 }}>
         <section style={SECTION}>
-          <div style={{ fontSize: 12, color: "#777", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>
+          <div style={{ fontSize: 11.5, color: theme.textMuted, textTransform: "uppercase", letterSpacing: 0.6, fontWeight: 600, marginBottom: 12 }}>
             What happened
           </div>
-          <div style={{ fontSize: 13.5, color: "#ddd", lineHeight: 1.6 }}>{item.headline}</div>
+          <div style={{ fontSize: 13.5, color: theme.textPrimary, lineHeight: 1.6 }}>{item.headline}</div>
           {item.locality && (
-            <div style={{ fontSize: 11.5, color: "#999", marginTop: 8 }}>📍 Reported near {item.locality}, Delhi</div>
+            <div style={{ fontSize: 11.5, color: theme.textSecondary, marginTop: 8 }}>Reported near {item.locality}, Delhi</div>
           )}
           <a
             href={item.link}
             target="_blank"
             rel="noopener noreferrer"
-            style={{ display: "inline-block", marginTop: 10, fontSize: 12, color: "#5b9dd9" }}
+            style={{ display: "inline-block", marginTop: 10, fontSize: 12, color: theme.accent }}
           >
             Read the source report ({item.source}) →
           </a>
         </section>
 
-        <section style={{ ...SECTION, borderColor: "#3a3220" }}>
-          <div style={{ fontSize: 12, color: "#e0b34d", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10, fontWeight: 700 }}>
-            Authorities &amp; response — not simulated
-          </div>
-          <div style={{ fontSize: 12.5, color: "#bbb", lineHeight: 1.6 }}>
-            This is a real news report, shown here only to mark where it happened. GovOS's simulated
-            response engine — the jurisdiction chain, authority sign-offs, and resource dispatch you'd see
-            on a running incident — only models the seeded Delhi localities it runs scenarios for
-            (Satya Niketan, Safdarjung Enclave, Sarojini Nagar, Munirka, Hauz Khas). No real MLA, SDM,
-            police station, or agency has actually been notified through this app about this story.
-          </div>
-        </section>
+        {item.jurisdiction ? (
+          <section style={SECTION}>
+            <DistrictGraph jurisdiction={item.jurisdiction} kind={item.kind} />
+          </section>
+        ) : (
+          <section style={{ ...SECTION, borderColor: `${theme.statusAwaiting}44` }}>
+            <div style={{ fontSize: 11.5, color: theme.statusAwaiting, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 10, fontWeight: 700 }}>
+              Jurisdiction unresolved
+            </div>
+            <div style={{ fontSize: 12.5, color: theme.textSecondary, lineHeight: 1.6 }}>
+              This story's location couldn't be matched to a specific Delhi district, so no authority
+              chain is shown. This is a real news report, not a simulated incident — no agency has been
+              notified through this app about it.
+            </div>
+          </section>
+        )}
       </div>
     </main>
   );

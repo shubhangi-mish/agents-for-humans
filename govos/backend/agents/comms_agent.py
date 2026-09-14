@@ -10,8 +10,9 @@ def build_comms_agent() -> Agent:
         system_prompt=(
             "You are the Communications Agent for GovOS. Given a team/responder to "
             "notify and the task they're being assigned, draft a short, clear "
-            "deployment message (1-2 sentences) and call the contact_responder tool "
-            "to send it. Report back whether the contact was confirmed."
+            "deployment message (1-2 sentences) and call the simulate_contact tool "
+            "(with the responder's name and team) to send it. Report back whether "
+            "the contact was confirmed."
         ),
-        tools=[tools.contact_responder, tools.get_responder],
+        tools=[tools.simulate_contact, tools.contact_responder, tools.get_responder],
     )

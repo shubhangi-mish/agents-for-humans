@@ -42,6 +42,10 @@ export interface Incident {
   source_headline: string | null;
   severity: string;
   status: IncidentStatus;
+  // Set for an incident outside the five pilot wards — its real geocoded
+  // coordinates, so the map can pin it without a REAL_LOCATIONS lookup.
+  lat: number | null;
+  lng: number | null;
   affected_wards: string[];
   tasks: Task[];
   approvals: Approval[];
@@ -60,6 +64,17 @@ export interface StreamMessage {
 
 export type NewsKind = "fire" | "collapse" | "flood" | "crime" | "accident" | "other";
 
+export interface DistrictJurisdiction {
+  district: string;
+  dm_office: string;
+  dcp_office: string;
+  mcd_zone: string;
+  cm_office: string;
+  ddma: string;
+  lg_office: string;
+  police_commissioner: string;
+}
+
 export interface NewsItem {
   id: string;
   headline: string;
@@ -70,5 +85,7 @@ export interface NewsItem {
   locality: string | null;
   lat: number | null;
   lng: number | null;
+  district: string | null;
+  jurisdiction: DistrictJurisdiction | null;
   fetched_at: number;
 }

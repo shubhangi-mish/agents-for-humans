@@ -6,21 +6,14 @@ import { MapContainer, Marker, Tooltip, TileLayer } from "react-leaflet";
 import { Incident, NewsItem } from "@/lib/types";
 import { DELHI_CENTER, REAL_LOCATIONS } from "@/lib/geo";
 import { TILE_ATTRIBUTION, TILE_OPTIONS, TILE_URL } from "@/lib/mapTiles";
-
-const STATUS_LABEL: Record<Incident["status"], string> = {
-  active: "In progress",
-  paused_for_approval: "Awaiting approval",
-  resolved: "Resolved",
-};
+import { STATUS_COLOR, STATUS_LABEL, theme } from "@/lib/theme";
 
 // One pin shape for everything on the map — an incident and a real news
 // report look the same at a glance, only the color (status) and the pulse
 // (still live vs. settled) differ. No per-scenario or per-kind icon variety.
 const PIN_COLOR: Record<string, string> = {
-  active: "#5b9dd9",
-  paused_for_approval: "#e0b34d",
-  resolved: "#6bbf7b",
-  news: "#9a9a9a",
+  ...STATUS_COLOR,
+  news: theme.statusNews,
 };
 
 type MapPin =
@@ -35,7 +28,7 @@ function uniformPinIcon(color: string, pulsing: boolean) {
         ${pulsing ? `<div class="govos-city-pulse" style="border-color:${color}"></div>` : ""}
         <div style="
             position:absolute; left:3px; top:0; width:20px; height:20px;
-            background:${color}; border:2px solid #0b0d0f;
+            background:${color}; border:2px solid ${theme.bg};
             border-radius:50% 50% 50% 0; transform:rotate(-45deg);
             box-shadow:0 3px 8px rgba(0,0,0,.6);
           "></div>
@@ -43,7 +36,7 @@ function uniformPinIcon(color: string, pulsing: boolean) {
             position:absolute; left:3px; top:0; width:20px; height:20px;
             display:flex; align-items:center; justify-content:center;
           ">
-          <div style="width:7px;height:7px;border-radius:50%;background:#0b0d0f;"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:${theme.bg};"></div>
         </div>
       </div>
     `,
@@ -81,8 +74,12 @@ function fanOut(pins: Omit<MapPin, "lat" | "lng">[], coords: (p: Omit<MapPin, "l
 function buildPins(incidents: Incident[], newsItems: NewsItem[]): MapPin[] {
   const incidentHeadlines = new Set(incidents.map((i) => i.source_headline).filter(Boolean));
 
+  // A pilot-ward incident is pinned via the fixed REAL_LOCATIONS lookup (no
+  // coordinates of its own); a city-wide incident carries its own real
+  // geocoded lat/lng (see models.Incident.lat/lng) since it isn't in that
+  // lookup table at all.
   const incidentPins: Omit<MapPin, "lat" | "lng">[] = incidents
-    .filter((i) => REAL_LOCATIONS[i.location])
+    .filter((i) => (i.lat != null && i.lng != null) || REAL_LOCATIONS[i.location])
     .map((i) => ({
       id: i.id,
       kind: "incident" as const,
@@ -104,7 +101,11 @@ function buildPins(incidents: Incident[], newsItems: NewsItem[]): MapPin[] {
     }));
 
   const coords = (p: Omit<MapPin, "lat" | "lng">) => {
-    if (p.kind === "incident") return REAL_LOCATIONS[(p.ref as Incident).location] ?? { lat: DELHI_CENTER[0], lng: DELHI_CENTER[1] };
+    if (p.kind === "incident") {
+      const inc = p.ref as Incident;
+      if (inc.lat != null && inc.lng != null) return { lat: inc.lat, lng: inc.lng };
+      return REAL_LOCATIONS[inc.location] ?? { lat: DELHI_CENTER[0], lng: DELHI_CENTER[1] };
+    }
     const n = p.ref as NewsItem;
     return { lat: n.lat as number, lng: n.lng as number };
   };
@@ -129,7 +130,7 @@ export default function CityMapInner({
     <MapContainer
       center={DELHI_CENTER}
       zoom={13}
-      style={{ width: "100%", height: "100%", background: "#0d0d0d" }}
+      style={{ width: "100%", height: "100%", background: theme.bg }}
       zoomControl={true}
       attributionControl={true}
     >
@@ -152,7 +153,7 @@ export default function CityMapInner({
           <Tooltip direction="top" offset={[0, -26]} opacity={0.97}>
             <div style={{ maxWidth: 220 }}>
               <div style={{ fontWeight: 700, fontSize: 12 }}>{pin.title}</div>
-              <div style={{ fontSize: 11, color: "#666", marginTop: 2 }}>{pin.subtitle}</div>
+              <div style={{ fontSize: 11, color: theme.textSecondary, marginTop: 2 }}>{pin.subtitle}</div>
             </div>
           </Tooltip>
         </Marker>

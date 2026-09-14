@@ -79,6 +79,12 @@ class Incident(BaseModel):
     source_headline: Optional[str] = None
     severity: str = "high"
     status: IncidentStatus = IncidentStatus.ACTIVE
+    # Real coordinates for incidents outside the five pilot wards (see
+    # incident_engine.start_incident) — the frontend map pins here when set,
+    # falling back to the pilot wards' fixed lookup table otherwise. None
+    # for a pilot-ward incident, which doesn't need it.
+    lat: Optional[float] = None
+    lng: Optional[float] = None
     affected_wards: list[str] = Field(default_factory=list)
     tasks: list[Task] = Field(default_factory=list)
     approvals: list[Approval] = Field(default_factory=list)

@@ -6,8 +6,8 @@ html,
 body {
   margin: 0;
   padding: 0;
-  background: #0d0d0d;
-  color: #eee;
+  background: #0a0d12;
+  color: #e6e9ef;
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
@@ -17,7 +17,7 @@ button {
 
 /* Leaflet dark-theme + gamified marker treatment */
 .leaflet-container {
-  background: #0d0d0d !important;
+  background: #0a0d12 !important;
   font-family: inherit;
 }
 /* fallback for the no-Mapbox-token path (plain OSM light tiles) so the map
@@ -26,19 +26,24 @@ button {
   filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9);
 }
 .leaflet-popup-content-wrapper,
-.leaflet-popup-tip {
-  background: #161616;
-  color: #eee;
-  border: 1px solid #333;
+.leaflet-popup-tip,
+.leaflet-tooltip {
+  background: #12161e;
+  color: #e6e9ef;
+  border: 1px solid #232a36;
 }
-.leaflet-popup-content-wrapper {
-  border-radius: 8px;
+.leaflet-popup-content-wrapper,
+.leaflet-tooltip {
+  border-radius: 6px;
   font-size: 12.5px;
 }
+.leaflet-tooltip-top:before {
+  border-top-color: #232a36;
+}
 .leaflet-control-zoom a {
-  background: #161616 !important;
-  color: #ccc !important;
-  border-color: #333 !important;
+  background: #12161e !important;
+  color: #9aa4b2 !important;
+  border-color: #232a36 !important;
 }
 
 /* smooth character/vehicle movement between waypoints — Leaflet repositions

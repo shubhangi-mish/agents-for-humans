@@ -1,4 +1,5 @@
 import { Incident } from "@/lib/types";
+import { theme } from "@/lib/theme";
 
 function findLast(events: Incident["events"], pred: (e: Incident["events"][number]) => boolean) {
   for (let i = events.length - 1; i >= 0; i--) {
@@ -18,23 +19,23 @@ export default function IncidentSummary({ incident }: { incident: Incident }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      <div style={{ fontSize: 12, color: "#777", textTransform: "uppercase", letterSpacing: 0.5 }}>
+      <div style={{ fontSize: 11.5, color: theme.textMuted, textTransform: "uppercase", letterSpacing: 0.6, fontWeight: 600 }}>
         What happened
       </div>
-      <div style={{ fontSize: 13, color: "#ddd", lineHeight: 1.6 }}>
+      <div style={{ fontSize: 13, color: theme.textPrimary, lineHeight: 1.6 }}>
         {intel?.text ?? "Situation summary not yet available — the Intel Agent hasn't reported in."}
       </div>
       {incident.affected_wards.length > 0 && (
-        <div style={{ fontSize: 11.5, color: "#999" }}>
-          📍 Affected area: {incident.affected_wards.join(", ")}
+        <div style={{ fontSize: 11.5, color: theme.textSecondary }}>
+          Affected area: {incident.affected_wards.join(", ")}
         </div>
       )}
       {briefing && (
-        <div style={{ marginTop: 4, paddingTop: 10, borderTop: "1px solid #262626" }}>
-          <div style={{ fontSize: 10.5, color: "#6bbf7b", fontWeight: 700, letterSpacing: 0.3, marginBottom: 4 }}>
+        <div style={{ marginTop: 4, paddingTop: 10, borderTop: `1px solid ${theme.border}` }}>
+          <div style={{ fontSize: 10.5, color: theme.statusResolved, fontWeight: 700, letterSpacing: 0.3, marginBottom: 4 }}>
             RESOLUTION BRIEFING
           </div>
-          <div style={{ fontSize: 12.5, color: "#ccc", lineHeight: 1.55 }}>{briefing.text}</div>
+          <div style={{ fontSize: 12.5, color: theme.textSecondary, lineHeight: 1.55 }}>{briefing.text}</div>
         </div>
       )}
     </div>

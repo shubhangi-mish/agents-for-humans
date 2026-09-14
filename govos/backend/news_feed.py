@@ -28,16 +28,22 @@ from pydantic import BaseModel, Field
 
 from agents import build_locality_agent
 from agents.base import run_agent_turn
+from agents.tools import DATA_DIR
 from models import new_id
 
 logger = logging.getLogger("govos.news")
+
+_DELHI_DISTRICTS = json.loads((DATA_DIR / "delhi_districts.json").read_text(encoding="utf-8"))
 
 # Persists seen-links + recent items across restarts — without this, every
 # `uvicorn` restart during dev forgets what it already broadcast and
 # re-announces the same ~30 real headlines as "new" again, which (a) wastes
 # LLM/geocoding calls re-processing headlines it's already extracted, and
 # (b) piles up duplicate pins at the same coordinate on the frontend map.
-STATE_FILE = Path(__file__).parent / ".local_state" / "news_feed_state.json"
+# Lives in its own subdirectory, not directly in .local_state/ — store.py's
+# LocalJSONStore globs every *.json file there as an Incident, and a sibling
+# file breaks that validation.
+STATE_FILE = Path(__file__).parent / ".local_state" / "news" / "news_feed_state.json"
 
 # Broad Delhi incident coverage — not limited to the response engine's two
 # simulated scenarios. Excludes a couple of noisy unrelated categories that
@@ -66,7 +72,7 @@ MAX_RECENT = 60
 
 _seen_links: set[str] = set()
 _recent_items: list["NewsItem"] = []
-_geocode_cache: dict[str, tuple[float, float] | None] = {}
+_geocode_cache: dict[str, tuple[float, float, str | None] | None] = {}
 
 
 class NewsItem(BaseModel):
@@ -79,6 +85,12 @@ class NewsItem(BaseModel):
     locality: str | None = None
     lat: float | None = None
     lng: float | None = None
+    # Real Delhi revenue district the geocoded point actually falls in
+    # (from Nominatim's own address breakdown — not guessed), plus that
+    # district's real authorities. Populated for ANY Delhi location, not
+    # just the response engine's five pilot wards.
+    district: str | None = None
+    jurisdiction: dict[str, str] | None = None
     fetched_at: float = Field(default_factory=time.time)
 
 
@@ -131,7 +143,21 @@ async def _extract_locality(headline: str) -> str | None:
     return text
 
 
-async def _geocode(locality: str) -> tuple[float, float] | None:
+def jurisdiction_for_district(district: str | None) -> dict[str, str] | None:
+    """Real district-level authorities for a Delhi revenue district name —
+    works for any of Delhi's 11 districts, not just the response engine's
+    five pilot wards. Merges the district's own DM/DCP/MCD-zone with the
+    city-wide top of the chain (CM, LG, DDMA, Police Commissioner) so the
+    frontend gets one flat, complete object."""
+    if district is None:
+        return None
+    entry = _DELHI_DISTRICTS["districts"].get(district)
+    if entry is None:
+        return None
+    return {"district": district, **entry, **_DELHI_DISTRICTS["top"]}
+
+
+async def _geocode(locality: str) -> tuple[float, float, str | None] | None:
     if locality in _geocode_cache:
         return _geocode_cache[locality]
     try:
@@ -141,6 +167,7 @@ async def _geocode(locality: str) -> tuple[float, float] | None:
                 params={
                     "q": f"{locality}, Delhi, India",
                     "format": "json",
+                    "addressdetails": 1,
                     "limit": 1,
                     "countrycodes": "in",
                     "viewbox": DELHI_VIEWBOX,
@@ -150,7 +177,12 @@ async def _geocode(locality: str) -> tuple[float, float] | None:
             )
         resp.raise_for_status()
         results = resp.json()
-        result = (float(results[0]["lat"]), float(results[0]["lon"])) if results else None
+        if results:
+            top = results[0]
+            district = top.get("address", {}).get("state_district")
+            result = (float(top["lat"]), float(top["lon"]), district)
+        else:
+            result = None
     except Exception:
         logger.exception("Geocoding failed for locality: %s", locality)
         result = None
@@ -164,7 +196,7 @@ async def _fetch_headlines() -> list[dict[str, Any]]:
     resp.raise_for_status()
     root = ET.fromstring(resp.text)
     headlines = []
-    for item in root.findall(".//item")[:30]:
+    for item in root.findall(".//item")[:10]:
         title_el, link_el, pub_el = item.find("title"), item.find("link"), item.find("pubDate")
         if title_el is None or not title_el.text or link_el is None or not link_el.text:
             continue
@@ -194,12 +226,16 @@ async def poll_once(broadcast: Callable[["NewsItem"], None]) -> int:
         new_count += 1
 
         kind = _classify_kind(h["title"])
-        locality = await _extract_locality(h["title"])
-        lat = lng = None
+        # Only spend an LLM call on locality extraction for headlines that
+        # are actually incident-shaped — a generic "other" story (court
+        # roundups, policy consultations, ...) was never going to get a map
+        # pin anyway, so extracting a locality for it is pure waste.
+        locality = await _extract_locality(h["title"]) if kind != "other" else None
+        lat = lng = district = None
         if locality:
             geocoded = await _geocode(locality)
             if geocoded:
-                lat, lng = geocoded
+                lat, lng, district = geocoded
 
         news_item = NewsItem(
             headline=h["title"],
@@ -209,6 +245,8 @@ async def poll_once(broadcast: Callable[["NewsItem"], None]) -> int:
             locality=locality,
             lat=lat,
             lng=lng,
+            district=district,
+            jurisdiction=jurisdiction_for_district(district),
         )
         _recent_items.append(news_item)
         del _recent_items[:-MAX_RECENT]

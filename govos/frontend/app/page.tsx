@@ -2,31 +2,19 @@
 
 import { useState } from "react";
 import CityMap from "@/components/CityMap";
+import CommandGraph from "@/components/CommandGraph";
 import EventStream from "@/components/EventStream";
 import IncidentSummary from "@/components/IncidentSummary";
-import KanbanBoard from "@/components/KanbanBoard";
 import NewsDetail from "@/components/NewsDetail";
 import NewsFeed from "@/components/NewsFeed";
-import OfficeSections from "@/components/OfficeSections";
+import { theme, STATUS_COLOR, STATUS_LABEL } from "@/lib/theme";
 import { resolveApproval, useEventStream, useIncidentList, useNewsFeed } from "@/lib/useEventStream";
 
-const STATUS_LABEL: Record<string, string> = {
-  active: "Active",
-  paused_for_approval: "Awaiting approval",
-  resolved: "Resolved",
-};
-
-const STATUS_COLOR: Record<string, string> = {
-  active: "#5b9dd9",
-  paused_for_approval: "#e0b34d",
-  resolved: "#6bbf7b",
-};
-
 const SECTION: React.CSSProperties = {
-  background: "#141414",
-  border: "1px solid #262626",
-  borderRadius: 12,
-  padding: 20,
+  background: theme.panel,
+  border: `1px solid ${theme.border}`,
+  borderRadius: 10,
+  padding: 22,
 };
 
 export default function Page() {
@@ -68,77 +56,70 @@ export default function Page() {
   }
 
   return (
-    <main style={{ minHeight: "100vh", background: "#0d0d0d" }}>
+    <main style={{ minHeight: "100vh", background: theme.bg }}>
       <header
         style={{
           position: "sticky",
           top: 0,
           zIndex: 10,
-          background: "#0d0d0dee",
+          background: `${theme.bg}ee`,
           backdropFilter: "blur(6px)",
-          borderBottom: "1px solid #262626",
+          borderBottom: `1px solid ${theme.border}`,
           display: "flex",
           flexDirection: "column",
           gap: 4,
-          padding: "14px 24px",
+          padding: "16px 28px",
         }}
       >
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: 0.5 }}>{incident.title}</span>
-          <span
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: 0.2, color: theme.textPrimary }}>{incident.title}</span>
+            <span
+              style={{
+                fontSize: 10,
+                color: STATUS_COLOR[incident.status],
+                border: `1px solid ${STATUS_COLOR[incident.status]}55`,
+                borderRadius: 4,
+                padding: "2px 8px",
+                fontWeight: 600,
+                letterSpacing: 0.3,
+              }}
+            >
+              {STATUS_LABEL[incident.status]}
+            </span>
+            <span style={{ fontSize: 10.5, color: theme.textMuted, letterSpacing: 0.3 }}>{incident.severity.toUpperCase()}</span>
+          </div>
+          <button
+            onClick={() => setSelectedId(null)}
             style={{
-              fontSize: 10.5,
-              color: STATUS_COLOR[incident.status],
-              border: `1px solid ${STATUS_COLOR[incident.status]}66`,
-              borderRadius: 4,
-              padding: "2px 8px",
-              fontWeight: 700,
-              letterSpacing: 0.3,
+              background: theme.bgElevated,
+              color: theme.textSecondary,
+              border: `1px solid ${theme.border}`,
+              borderRadius: 6,
+              padding: "7px 14px",
+              cursor: "pointer",
+              fontSize: 12,
             }}
           >
-            {STATUS_LABEL[incident.status]}
-          </span>
-          <span style={{ fontSize: 11, color: "#666" }}>{incident.severity.toUpperCase()}</span>
+            ← Back to city map
+          </button>
         </div>
-        <button
-          onClick={() => setSelectedId(null)}
-          style={{
-            background: "#1a1a1a",
-            color: "#bbb",
-            border: "1px solid #333",
-            borderRadius: 6,
-            padding: "7px 14px",
-            cursor: "pointer",
-            fontSize: 12,
-          }}
-        >
-          ← Back to city map
-        </button>
-      </div>
-      {incident.source_headline && (
-        <div style={{ fontSize: 11, color: "#888" }}>📰 Sourced from live news: “{incident.source_headline}”</div>
-      )}
+        {incident.source_headline && (
+          <div style={{ fontSize: 11, color: theme.textMuted }}>Sourced from live news: "{incident.source_headline}"</div>
+        )}
       </header>
 
-      <div style={{ maxWidth: 900, margin: "0 auto", padding: "20px 20px 60px", display: "flex", flexDirection: "column", gap: 20 }}>
+      <div style={{ maxWidth: 980, margin: "0 auto", padding: "24px 20px 60px", display: "flex", flexDirection: "column", gap: 20 }}>
         <section style={SECTION}>
           <IncidentSummary key={incident.id} incident={incident} />
         </section>
 
         <section style={SECTION}>
-          <OfficeSections key={incident.id} incident={incident} />
+          <CommandGraph key={incident.id} incident={incident} onDecideApproval={handleDecideApproval} />
         </section>
 
         <section style={SECTION}>
-          <div style={{ fontSize: 12, color: "#777", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 14 }}>
-            Resources deployed
-          </div>
-          <KanbanBoard key={incident.id} incident={incident} onDecideApproval={handleDecideApproval} />
-        </section>
-
-        <section style={SECTION}>
-          <div style={{ fontSize: 12, color: "#777", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>
+          <div style={{ fontSize: 11.5, color: theme.textMuted, textTransform: "uppercase", letterSpacing: 0.6, fontWeight: 600, marginBottom: 12 }}>
             Full activity log
           </div>
           <div style={{ maxHeight: 260, overflowY: "auto" }}>

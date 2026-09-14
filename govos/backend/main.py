@@ -4,15 +4,12 @@ import asyncio
 import json
 import logging
 import os
-import random
-import xml.etree.ElementTree as ET
 from typing import Any
 
 from dotenv import load_dotenv
 
 load_dotenv()  # must run before agents.base reads GOVOS_*/OPENAI_* env vars at import time
 
-import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -48,37 +45,26 @@ _latest_subscribers: list[asyncio.Queue] = []
 # response engine is actually running.
 _news_subscribers: list[asyncio.Queue] = []
 
-AUTO_TRIGGER_ENABLED = os.getenv("GOVOS_AUTO_TRIGGER", "true").lower() == "true"
-AUTO_TRIGGER_INTERVAL_SECONDS = int(os.getenv("GOVOS_AUTO_TRIGGER_INTERVAL_SECONDS", "90"))
+PILOT_SIM_ENABLED = os.getenv("GOVOS_PILOT_SIM", "true").lower() == "true"
 
-NEWS_FEED_ENABLED = os.getenv("GOVOS_NEWS_FEED", "true").lower() == "true"
-NEWS_FEED_POLL_INTERVAL_SECONDS = int(os.getenv("GOVOS_NEWS_FEED_INTERVAL_SECONDS", "45"))
+# Off by default: continuous background polling burns a real LLM call
+# (locality extraction) plus a geocoding request per new headline whether or
+# not anyone has the app open. The default path is on-demand only — see
+# POST /news/refresh, which the frontend's Refresh button calls. Set this to
+# "true" (and optionally tune the interval) if you actually want it to keep
+# polling itself on a timer.
+NEWS_FEED_BACKGROUND_POLLING = os.getenv("GOVOS_NEWS_FEED_BACKGROUND", "false").lower() == "true"
+NEWS_FEED_POLL_INTERVAL_SECONDS = int(os.getenv("GOVOS_NEWS_FEED_INTERVAL_SECONDS", "180"))
 
-# Real South Delhi locations to draw from for auto-generated incidents —
-# mirrors backend/data/wards.json. Every entry gets its own location so
-# incidents actually spread across the map instead of clustering.
-AUTO_TRIGGER_POOL: list[dict[str, Any]] = [
-    {"scenario": "building_collapse", "location": "Satya Niketan", "location_id": "satya-niketan"},
-    {"scenario": "building_collapse", "location": "Hauz Khas", "location_id": "hauz-khas"},
-    {"scenario": "building_collapse", "location": "Munirka", "location_id": "munirka"},
-    {"scenario": "building_collapse", "location": "Safdarjung Enclave", "location_id": "safdarjung-enclave"},
-    {"scenario": "flood", "location": "Sarojini Nagar", "location_id": "sarojini-nagar", "zone": "South Delhi", "rainfall_intensity": "high", "expected_duration_hours": 4},
-    {"scenario": "flood", "location": "Munirka", "location_id": "munirka", "zone": "South Delhi", "rainfall_intensity": "high", "expected_duration_hours": 4},
-]
-
-USE_REAL_NEWS_SIGNAL = os.getenv("GOVOS_USE_REAL_NEWS", "true").lower() == "true"
-# India-wide (not Delhi-only) — a Delhi-specific building-collapse/flood
-# headline on any given day is rare, so narrowing to "Delhi" starved this of
-# matches almost every cycle. Broader search = the sim is actually grounded
-# in a real headline most of the time instead of silently falling back to
-# the synthetic pool. The real story's real location is never used for the
-# simulated response — only the scenario *type* (flood vs collapse) — so
-# this is safe to broaden without misrepresenting where a real event happened.
-NEWS_RSS_URL = (
-    "https://news.google.com/rss/search?q=India%20(building%20collapse%20OR%20structure%20collapse%20OR%20flood%20OR%20waterlogging)"
-    "&hl=en-IN&gl=IN&ceid=IN:en"
-)
-NEWS_LOCALITY_IDS = {
+# The response engine's five seeded pilot wards (see backend/data/wards.json)
+# — the only places it can run the full task/approval simulation, since that
+# depends on wards.json's schematic hospital/team layout. A real news item
+# only ever triggers a pilot simulation when the story genuinely names one of
+# these — matched against both the extracted locality and the raw headline.
+# There is no random fallback: an unmatched headline just stays a real,
+# unprocessed news pin (see news_feed.py) rather than getting assigned to a
+# ward it was never actually about.
+PILOT_WARDS: dict[str, tuple[str, str]] = {
     "satya niketan": ("Satya Niketan", "satya-niketan"),
     "safdarjung": ("Safdarjung Enclave", "safdarjung-enclave"),
     "sarojini nagar": ("Sarojini Nagar", "sarojini-nagar"),
@@ -86,56 +72,23 @@ NEWS_LOCALITY_IDS = {
     "hauz khas": ("Hauz Khas", "hauz-khas"),
 }
 
+# Which of news_feed.py's broader news kinds the response engine actually
+# has a scenario/SOP for (see incident_engine.SCENARIO_TITLES and
+# backend/data/sop_*.json). "crime" and "accident" news still show up as
+# real, geocoded pins — they just don't get a full simulated government
+# response yet, since the engine has no SOP written for them.
+NEWS_KIND_TO_SCENARIO: dict[str, str] = {
+    "collapse": "building_collapse",
+    "flood": "flood",
+    "fire": "fire",
+}
 
-async def _fetch_real_news_trigger() -> dict[str, Any] | None:
-    """Looks for a real, current Delhi disaster-type headline via Google
-    News RSS (public, no API key) and turns it into an incident trigger, so
-    auto-generated incidents are grounded in a real external signal rather
-    than only a fixed synthetic pool — the same role a real EventBridge
-    weather/sensor feed would play. The headline is shown to the user as
-    the *reason* the sim fired; the actual scenario still plays out at our
-    own simulated South Delhi locations/offices, never the real story's
-    real location or any real casualty details."""
-    try:
-        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
-            resp = await client.get(NEWS_RSS_URL)
-        resp.raise_for_status()
-        root = ET.fromstring(resp.text)
-        for item in root.findall(".//item")[:25]:
-            title_el = item.find("title")
-            if title_el is None or not title_el.text:
-                continue
-            headline = title_el.text
-            lower = headline.lower()
 
-            if any(k in lower for k in ("flood", "waterlog", "heavy rain")):
-                scenario = "flood"
-            elif any(k in lower for k in ("collapse", "building", "fire", "blaze")):
-                scenario = "building_collapse"
-            else:
-                continue
-
-            # If the headline doesn't name one of our known localities,
-            # pick one at random rather than always defaulting to the same
-            # place — otherwise every unmatched headline piles up at Satya
-            # Niketan.
-            location, location_id = random.choice(list(NEWS_LOCALITY_IDS.values()))
-            for needle, (name, loc_id) in NEWS_LOCALITY_IDS.items():
-                if needle in lower:
-                    location, location_id = name, loc_id
-                    break
-
-            return {
-                "scenario": scenario,
-                "location": location,
-                "location_id": location_id,
-                "zone": "South Delhi",
-                "rainfall_intensity": "high",
-                "expected_duration_hours": 4,
-                "source_headline": headline,
-            }
-    except Exception:
-        logger.exception("Real-news trigger fetch failed; falling back to synthetic pool")
+def _match_pilot_ward(item: news_feed.NewsItem) -> tuple[str, str] | None:
+    haystacks = [h.lower() for h in (item.locality, item.headline) if h]
+    for needle, ward in PILOT_WARDS.items():
+        if any(needle in h for h in haystacks):
+            return ward
     return None
 
 
@@ -149,16 +102,92 @@ def _broadcast_latest(incident: Incident) -> None:
         q.put_nowait({"incident_id": incident.id, "title": incident.title, "scenario": incident.scenario})
 
 
+# Locations with a simulation currently being started or run — closes the
+# race where several articles about the same real, still-unfolding story (a
+# dozen outlets all covering one building collapse) get processed in the
+# same poll cycle and would otherwise all pass the "no active incident yet"
+# check before the first one finishes saving. Set synchronously the moment
+# a trigger is accepted, before the task that actually creates it even gets
+# a turn to run.
+_sim_triggering: set[str] = set()
+
+
+def _has_active_incident_at(location: str) -> bool:
+    """A real ongoing story (e.g. one building collapse) gets reported by a
+    dozen different outlets over the following days — each is a genuinely
+    new news item, but they're all the same real-world event, not a dozen
+    separate incidents. Only start a new simulation for a location that
+    doesn't already have one still running."""
+    if location in _sim_triggering:
+        return True
+    return any(i.location == location and i.status != "resolved" for i in store.list())
+
+
 def _broadcast_news(item: news_feed.NewsItem) -> None:
     for q in _news_subscribers:
         q.put_nowait(json.loads(item.model_dump_json()))
 
+    scenario = NEWS_KIND_TO_SCENARIO.get(item.kind)
+    if not PILOT_SIM_ENABLED or scenario is None:
+        return
+
+    matched = _match_pilot_ward(item)
+    if matched is not None:
+        location, location_id = matched
+        trigger: dict[str, Any] = {
+            "scenario": scenario,
+            "location": location,
+            "location_id": location_id,
+            "zone": "South Delhi",
+            "rainfall_intensity": "high",
+            "expected_duration_hours": 4,
+            "source_headline": item.headline,
+        }
+    elif item.district and item.lat is not None and item.lng is not None:
+        # Anywhere else in Delhi the story genuinely geocoded to — runs the
+        # same live agent pipeline against the district's real jurisdiction
+        # and a synthesized-but-real responder roster (see
+        # incident_engine._resolve_jurisdiction / _responders_for) instead
+        # of the pilot wards' fixed schematic data.
+        location = item.locality or item.district
+        trigger = {
+            "scenario": scenario,
+            "location": location,
+            "district": item.district,
+            "lat": item.lat,
+            "lng": item.lng,
+            "source_headline": item.headline,
+        }
+    else:
+        return
+
+    if _has_active_incident_at(location):
+        return
+    _sim_triggering.add(location)
+    asyncio.create_task(_start_incident_sim(trigger))
+
+
+async def _start_incident_sim(trigger: dict[str, Any]) -> None:
+    try:
+        incident = await incident_engine.start_incident(trigger)
+        store.save(incident)
+        _broadcast_latest(incident)
+        logger.info(
+            "Real news matched %s — running full simulation for %s: %r",
+            trigger["location"], incident.id, trigger["source_headline"],
+        )
+        await _run_and_stream(incident, trigger)
+    finally:
+        _sim_triggering.discard(trigger["location"])
+
 
 async def _news_feed_loop() -> None:
-    """Polls the real Delhi news feed on its own schedule, independent of
-    the simulated incident auto-trigger loop below — every headline here is
-    a real story, geocoded to where it actually happened, whether or not
-    the response engine knows how to simulate a government reaction to it."""
+    """Polls the real Delhi news feed on its own schedule — the single
+    source of truth for everything on the map. Every headline is a real
+    story, geocoded to where it actually happened; the ones that genuinely
+    name one of the response engine's pilot wards also get a full simulated
+    government response (via _broadcast_news above), the rest just show up
+    as real, unprocessed news pins."""
     while True:
         try:
             found = await news_feed.poll_once(_broadcast_news)
@@ -200,9 +229,15 @@ async def _run_and_stream(incident: Incident, trigger: dict) -> None:
 
 
 class TriggerPayload(BaseModel):
-    scenario: str = "building_collapse"  # "building_collapse" | "flood"
+    scenario: str = "building_collapse"  # "building_collapse" | "flood" | "fire"
     location: str = "Satya Niketan"
-    location_id: str = "satya-niketan"
+    # Pilot-ward path: set location_id to one of wards.json's five seeded
+    # localities. City-wide path: leave location_id unset and set district
+    # (+ optionally lat/lng) instead — see incident_engine._resolve_jurisdiction.
+    location_id: str | None = None
+    district: str | None = None
+    lat: float | None = None
+    lng: float | None = None
     zone: str = "South Delhi"
     rainfall_intensity: str = "high"
     expected_duration_hours: int = 4
@@ -234,34 +269,9 @@ async def eventbridge_trigger(envelope: dict[str, Any]) -> dict[str, str]:
     return {"incident_id": incident.id}
 
 
-async def _auto_trigger_loop() -> None:
-    """Simulates a live city feed: periodically starts a new incident, exactly
-    like a real EventBridge weather/sensor feed would, with no human clicking
-    anything. Prefers a real current news signal (see
-    _fetch_real_news_trigger) and falls back to the synthetic location pool
-    when no matching headline is found this cycle."""
-    while True:
-        await asyncio.sleep(AUTO_TRIGGER_INTERVAL_SECONDS)
-        try:
-            trigger = await _fetch_real_news_trigger() if USE_REAL_NEWS_SIGNAL else None
-            source = "live news"
-            if trigger is None:
-                trigger = dict(random.choice(AUTO_TRIGGER_POOL))
-                source = "synthetic feed"
-            incident = await incident_engine.start_incident(trigger)
-            store.save(incident)
-            _broadcast_latest(incident)
-            logger.info("Auto-triggered incident %s (source=%s): %s", incident.id, source, trigger)
-            await _run_and_stream(incident, trigger)
-        except Exception:
-            logger.exception("Auto-trigger loop iteration failed")
-
-
 @app.on_event("startup")
 async def _start_background_tasks() -> None:
-    if AUTO_TRIGGER_ENABLED:
-        asyncio.create_task(_auto_trigger_loop())
-    if NEWS_FEED_ENABLED:
+    if NEWS_FEED_BACKGROUND_POLLING:
         asyncio.create_task(_news_feed_loop())
 
 
@@ -345,8 +355,26 @@ async def stream_latest():
 @app.get("/news")
 async def list_news() -> list[dict[str, Any]]:
     """Recent real Delhi headlines, newest first — same items the
-    /stream/news SSE feed announces as they're found."""
+    /stream/news SSE feed announces as they're found. Never itself triggers
+    a poll (see POST /news/refresh) — just returns whatever's already
+    cached, so opening the app costs nothing."""
     return [json.loads(i.model_dump_json()) for i in news_feed.recent_items()]
+
+
+_news_refresh_lock = asyncio.Lock()
+
+
+@app.post("/news/refresh")
+async def refresh_news() -> dict[str, int]:
+    """On-demand poll — the Refresh button's target. This is the only place
+    that spends an LLM/geocoding call by default now (see
+    NEWS_FEED_BACKGROUND_POLLING): nothing runs on a timer unless a person
+    (or a re-enabled background loop) actually asks for it. Locked so a
+    double-click doesn't fire two overlapping RSS fetches."""
+    if _news_refresh_lock.locked():
+        return {"new_items": 0}
+    async with _news_refresh_lock:
+        return {"new_items": await news_feed.poll_once(_broadcast_news)}
 
 
 @app.get("/stream/news")

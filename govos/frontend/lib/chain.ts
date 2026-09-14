@@ -1,4 +1,4 @@
-import { GovEvent, Incident } from "./types";
+import { DistrictJurisdiction, GovEvent, Incident } from "./types";
 
 export interface OfficeNode {
   id: string;
@@ -9,7 +9,7 @@ export interface OfficeNode {
   message: string | null;
 }
 
-interface Jurisdiction {
+interface WardJurisdiction {
   assembly_constituency: string;
   mla_office: string;
   lok_sabha_constituency: string;
@@ -24,6 +24,12 @@ interface Jurisdiction {
   discom: string;
 }
 
+type Jurisdiction = WardJurisdiction | DistrictJurisdiction;
+
+function isWardJurisdiction(j: Jurisdiction): j is WardJurisdiction {
+  return "police_station" in j;
+}
+
 function findLast(events: GovEvent[], pred: (e: GovEvent) => boolean): GovEvent | undefined {
   for (let i = events.length - 1; i >= 0; i--) {
     if (pred(events[i])) return events[i];
@@ -35,6 +41,7 @@ function officerFor(office: string): string {
   if (office.includes("SDM")) return "Sub-Divisional Magistrate on duty";
   if (office.includes("District Magistrate")) return "Duty Officer S. Verma";
   if (office.includes("Commissioner of Police")) return "Coordination Officer V. Menon";
+  if (office.includes("DCP")) return "Station Coordination Officer";
   if (office.includes("DDMA")) return "Situation Officer M. Iyer";
   if (office.includes("MLA")) return "Constituency Office Secretary A. Bhatia";
   if (office.includes("PS ") || office.toLowerCase().includes("police station")) return "Station House Officer R. Sharma";
@@ -42,7 +49,7 @@ function officerFor(office: string): string {
 }
 
 function eyebrowFor(office: string): string {
-  if (office.includes("Commissioner of Police") || office.startsWith("PS ")) return "DELHI POLICE";
+  if (office.includes("Commissioner of Police") || office.includes("DCP") || office.startsWith("PS ")) return "DELHI POLICE";
   if (office.includes("MLA") || office.includes("DDMA")) return "GOVERNMENT OF NCT OF DELHI";
   if (office.includes("SDM") || office.includes("District Magistrate")) return "GNCTD — REVENUE DEPARTMENT";
   return "MUNICIPAL CORPORATION OF DELHI";
@@ -50,8 +57,10 @@ function eyebrowFor(office: string): string {
 
 /** Assembles the real jurisdiction chain for this specific incident. Which
  * offices show up, and in what order, comes entirely from the incident's own
- * events — the local police station and MLA office are named the moment the
- * ward's jurisdiction is resolved, and each authority tier (District
+ * events. A pilot-ward incident resolves ward-level jurisdiction (police
+ * station, SDM, MLA); anywhere else in Delhi resolves the coarser but still
+ * real district-level jurisdiction (DCP, District Magistrate) — see
+ * incident_engine._resolve_jurisdiction. Each authority tier (District
  * Magistrate / Police Commissioner / DDMA) appears only if that incident
  * actually needed it. Nothing here is a fixed ladder, and nothing waits on a
  * human — every node's message is already a resolved action, not a pending
@@ -65,14 +74,25 @@ export function buildChain(incident: Incident): OfficeNode[] {
   const jurisdiction = jurisdictionEvt?.data?.jurisdiction as Jurisdiction | undefined;
 
   if (jurisdiction) {
-    chain.push({
-      id: "police-station",
-      office: jurisdiction.police_station,
-      officer: officerFor(jurisdiction.police_station),
-      role: `${jurisdiction.police_district} — cordon & law and order`,
-      eyebrow: "DELHI POLICE",
-      message: `Cordon and crowd-control support requested for ${incident.affected_wards[0] ?? incident.location}.`,
-    });
+    if (isWardJurisdiction(jurisdiction)) {
+      chain.push({
+        id: "police-station",
+        office: jurisdiction.police_station,
+        officer: officerFor(jurisdiction.police_station),
+        role: `${jurisdiction.police_district} — cordon & law and order`,
+        eyebrow: "DELHI POLICE",
+        message: `Cordon and crowd-control support requested for ${incident.affected_wards[0] ?? incident.location}.`,
+      });
+    } else {
+      chain.push({
+        id: "police-station",
+        office: jurisdiction.dcp_office,
+        officer: officerFor(jurisdiction.dcp_office),
+        role: `${jurisdiction.district} — cordon & law and order`,
+        eyebrow: "DELHI POLICE",
+        message: `Cordon and crowd-control support requested for ${incident.affected_wards[0] ?? incident.location}.`,
+      });
+    }
   }
 
   const resource = findLast(events, (e) => e.agent === "resource_agent" && e.kind === "reasoning");
@@ -81,29 +101,44 @@ export function buildChain(incident: Incident): OfficeNode[] {
     id: "control-room",
     office: jurisdiction?.mcd_zone ?? "MCD South Zone — Disaster Management Cell",
     officer: officerFor(jurisdiction?.mcd_zone ?? ""),
-    role: jurisdiction ? `${jurisdiction.mcd_ward} — zonal control room` : "Zonal control room",
+    role: jurisdiction
+      ? isWardJurisdiction(jurisdiction)
+        ? `${jurisdiction.mcd_ward} — zonal control room`
+        : `${jurisdiction.district} — civic control room`
+      : "Zonal control room",
     eyebrow: "MUNICIPAL CORPORATION OF DELHI",
     message: (resource ?? intel)?.text ?? null,
   });
 
   if (jurisdiction) {
-    chain.push({
-      id: "sdm-office",
-      office: jurisdiction.sdm_office,
-      officer: officerFor(jurisdiction.sdm_office),
-      role: `SDM, ${jurisdiction.sdm_subdivision} subdivision`,
-      eyebrow: "GNCTD — REVENUE DEPARTMENT",
-      message: `On-ground coordination briefing received for ${incident.affected_wards.join(", ")}.`,
-    });
+    if (isWardJurisdiction(jurisdiction)) {
+      chain.push({
+        id: "sdm-office",
+        office: jurisdiction.sdm_office,
+        officer: officerFor(jurisdiction.sdm_office),
+        role: `SDM, ${jurisdiction.sdm_subdivision} subdivision`,
+        eyebrow: "GNCTD — REVENUE DEPARTMENT",
+        message: `On-ground coordination briefing received for ${incident.affected_wards.join(", ")}.`,
+      });
 
-    chain.push({
-      id: "mla-office",
-      office: jurisdiction.mla_office,
-      officer: officerFor(jurisdiction.mla_office),
-      role: `MLA, ${jurisdiction.assembly_constituency}`,
-      eyebrow: "GOVERNMENT OF NCT OF DELHI",
-      message: `Constituency briefed — response under way in ${incident.affected_wards.join(", ")}.`,
-    });
+      chain.push({
+        id: "mla-office",
+        office: jurisdiction.mla_office,
+        officer: officerFor(jurisdiction.mla_office),
+        role: `MLA, ${jurisdiction.assembly_constituency}`,
+        eyebrow: "GOVERNMENT OF NCT OF DELHI",
+        message: `Constituency briefed — response under way in ${incident.affected_wards.join(", ")}.`,
+      });
+    } else {
+      chain.push({
+        id: "dm-office",
+        office: jurisdiction.dm_office,
+        officer: officerFor(jurisdiction.dm_office),
+        role: `${jurisdiction.district} — emergency sanction authority`,
+        eyebrow: "GNCTD — REVENUE DEPARTMENT",
+        message: `District briefing received for ${incident.affected_wards.join(", ")}.`,
+      });
+    }
   }
 
   for (const approval of incident.approvals) {

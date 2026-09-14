@@ -94,6 +94,64 @@ def get_jurisdiction(ward_id: str) -> dict[str, Any] | None:
 
 
 @tool
+def get_district_jurisdiction(district: str) -> dict[str, Any] | None:
+    """Real district-level authorities for any of Delhi's 11 revenue
+    districts (District Magistrate, DCP, MCD zone, plus the city-wide top —
+    CM's Office, DDMA, LG's Office, Police Commissioner). Works for
+    anywhere in Delhi, unlike get_jurisdiction() which only covers the five
+    seeded pilot wards. Returns None for an unrecognized district name."""
+    data = _load("delhi_districts.json")
+    entry = data["districts"].get(district)
+    if entry is None:
+        return None
+    return {"district": district, **entry, **data["top"]}
+
+
+@tool
+def get_district_responders(district: str) -> dict[str, dict[str, str]]:
+    """Synthesizes a real-institution-type responder roster for any Delhi
+    district — same three team roles as the pilot wards' fixed directory.json
+    roster (Fire & Rescue, Rapid Action, Medical/Ambulance), but named for
+    the district actually affected instead of always the same five South
+    Delhi offices. Fire response and civic/disaster coordination are
+    genuinely local (real per-district office *types* — this doesn't claim
+    to know the exact station address); ambulance dispatch (CATS / 102) is
+    genuinely centralized citywide in real life, so that entry stays
+    constant across every district. Returns {} for an unrecognized district."""
+    jurisdiction = get_district_jurisdiction(district)
+    if jurisdiction is None:
+        return {}
+    slug = district.lower().replace(" ", "-")
+    return {
+        "Fire & Rescue Unit": {
+            "id": f"dfs-{slug}",
+            "name": f"Delhi Fire Service — {district} Divisional Control Room",
+            "team": "Fire & Rescue Unit",
+        },
+        "Rapid Action Team": {
+            "id": f"mcd-{slug}",
+            "name": f"{jurisdiction['mcd_zone']} — Disaster Management Cell",
+            "team": "Rapid Action Team",
+        },
+        "Medical/Ambulance Unit": {
+            "id": "resp-003",
+            "name": "CATS Ambulance Control Room",
+            "team": "Medical/Ambulance Unit",
+        },
+    }
+
+
+@tool
+def simulate_contact(responder_name: str, team: str, message: str) -> dict[str, Any]:
+    """Simulated outbound contact (SMS/call) to a responder identified by
+    name rather than a fixed directory id — generalizes contact_responder()
+    so it also works for get_district_responders()'s synthesized city-wide
+    roster, not only directory.json's five-pilot-ward entries. No real
+    telecom integration; always confirmed, since this is a simulation."""
+    return {"status": "confirmed", "responder": responder_name, "team": team, "message_sent": message}
+
+
+@tool
 def get_sop(topic: str = "building_collapse") -> dict[str, Any]:
     """Loads the Standard Operating Procedure document for the given incident
     scenario (e.g. "building_collapse" or "flood"), including which actions

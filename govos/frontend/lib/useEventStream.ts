@@ -135,6 +135,18 @@ export function useNewsFeed(): NewsItem[] {
   return items;
 }
 
+/** On-demand poll — the Refresh button's target. Nothing polls itself on a
+ * timer by default (see backend/main.py's NEWS_FEED_BACKGROUND_POLLING);
+ * this is the only thing that spends a real LLM/geocoding call, and only
+ * when someone actually asks for it. New items arrive back through the
+ * already-open /stream/news connection useNewsFeed listens on — this call
+ * just triggers the poll, it doesn't need to return the items itself. */
+export async function refreshNews(): Promise<{ new_items: number }> {
+  const res = await fetch(`${API}/news/refresh`, { method: "POST" });
+  if (!res.ok) throw new Error(`refresh failed: ${res.status}`);
+  return res.json();
+}
+
 export async function resolveApproval(
   incidentId: string,
   approvalId: string,

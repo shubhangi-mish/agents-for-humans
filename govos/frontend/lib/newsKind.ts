@@ -1,4 +1,5 @@
 import { NewsKind } from "./types";
+import { theme } from "./theme";
 
 export const NEWS_KIND_ICON: Record<NewsKind, string> = {
   fire: "🔥",
@@ -10,10 +11,10 @@ export const NEWS_KIND_ICON: Record<NewsKind, string> = {
 };
 
 export const NEWS_KIND_COLOR: Record<NewsKind, string> = {
-  fire: "#e0654d",
-  collapse: "#e0b34d",
-  flood: "#5b9dd9",
-  crime: "#b366d9",
-  accident: "#e0a04d",
-  other: "#888",
+  fire: theme.kindFire,
+  collapse: theme.kindCollapse,
+  flood: theme.kindFlood,
+  crime: theme.kindCrime,
+  accident: theme.kindAccident,
+  other: theme.kindOther,
 };

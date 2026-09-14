@@ -1,0 +1,21 @@
+{
+  "_note": "SOP structured after publicly known fire-response procedure patterns (Delhi Fire Service / NDMA style escalation), not a copy of any specific government document.",
+  "id": "SOP-FIRE-1.3",
+  "title": "Structural/Industrial Fire Response SOP v1.3",
+  "trigger_conditions": [
+    "Fire reported at a residential, commercial, or industrial premises",
+    "Possible entrapment, casualties, or hazardous-material exposure at the site"
+  ],
+  "auto_approved_actions": [
+    "Deploy Fire & Rescue Unit to the site for suppression and search",
+    "Deploy Rapid Action Team for area cordon and crowd control",
+    "Send alert to nearby responder units"
+  ],
+  "requires_human_approval": [
+    "Any expenditure above INR 5,00,000",
+    "Deploying Medical/Ambulance Unit to a facility or route flagged as access-blocked",
+    "Requesting additional fire tenders beyond the local station's standard response",
+    "Public-facing emergency broadcast to residents"
+  ],
+  "escalation_rule": "If the suppression or casualty-evacuation task remains unresolved 15+ minutes after assignment, escalate to the District Control Room (on-call) and open an approval request if further spend or blocked-route medical deployment is required."
+}

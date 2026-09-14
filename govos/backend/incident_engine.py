@@ -65,23 +65,51 @@ def _select_authority(action_summary: str, amount_inr: float | None) -> dict:
     return AUTHORITY_TIERS["district_magistrate"]
 
 
-def _primary_jurisdiction(incident: Incident) -> dict | None:
-    for ward_id in incident.plan_state.get("affected_ward_ids", []):
-        jurisdiction = tools.get_jurisdiction(ward_id)
+def _resolve_jurisdiction(incident: Incident, trigger: dict) -> dict | None:
+    """Pilot-ward incidents (trigger has a location_id) resolve the same
+    granular ward-level jurisdiction as before — police station, SDM, MLA.
+    Anywhere else in Delhi (a real geocoded district from news_feed.py)
+    resolves the coarser but still-real district-level jurisdiction — DM,
+    DCP, MCD zone — see tools.get_district_jurisdiction."""
+    location_id = trigger.get("location_id")
+    if location_id:
+        jurisdiction = tools.get_jurisdiction(location_id)
         if jurisdiction:
             return jurisdiction
+    district = trigger.get("district") or incident.plan_state.get("district")
+    if district:
+        return tools.get_district_jurisdiction(district)
     return None
+
+
+def _responders_for(incident: Incident) -> dict[str, dict]:
+    """Pilot-ward incidents keep using directory.json's fixed five-office
+    roster (unchanged). Anywhere else, synthesizes a real-institution-type
+    roster for the incident's actual district — see
+    tools.get_district_responders."""
+    jurisdiction = incident.plan_state.get("jurisdiction")
+    if jurisdiction and "police_station" in jurisdiction:
+        directory = tools._load("directory.json")  # noqa: SLF001 - internal helper reused intentionally
+        return {r["team"]: r for r in directory["responders"]}
+    district = incident.plan_state.get("district") or (jurisdiction or {}).get("district")
+    responders = tools.get_district_responders(district) if district else {}
+    if responders:
+        return responders
+    directory = tools._load("directory.json")  # noqa: SLF001
+    return {r["team"]: r for r in directory["responders"]}
 
 
 SCENARIO_TITLES = {
     "building_collapse": "Building Collapse Response — {location}",
     "flood": "Flood Response — South Delhi",
+    "fire": "Fire Response — {location}",
 }
 # Task templates are keyed by scenario so both scenarios can reuse the same
 # real-institution team roster in directory.json (see its _note).
 HOSPITAL_TASK_TITLE = {
     "building_collapse": "Casualty evacuation — hospital access",
     "flood": "Hospital access check",
+    "fire": "Casualty triage — hospital access",
 }
 
 
@@ -94,17 +122,34 @@ async def start_incident(trigger: dict) -> Incident:
     location = trigger.get("location", "Satya Niketan")
     title = SCENARIO_TITLES.get(scenario, SCENARIO_TITLES["building_collapse"]).format(location=location)
     headline = trigger.get("source_headline")
-    incident = Incident(title=title, scenario=scenario, location=location, severity="high", source_headline=headline)
+    incident = Incident(
+        title=title,
+        scenario=scenario,
+        location=location,
+        severity="high",
+        source_headline=headline,
+        lat=trigger.get("lat"),
+        lng=trigger.get("lng"),
+    )
     incident.plan_state["scenario"] = scenario
+    if trigger.get("district"):
+        incident.plan_state["district"] = trigger["district"]
 
-    system_text = f"Incident triggered ({scenario}) via EventBridge. No human prompt."
+    system_text = f"Incident triggered ({scenario}). No human prompt."
     if headline:
-        system_text += (
-            f' Signal source: live news — "{headline}" (headline used only to '
-            "decide the incident type; location and response are this "
-            "system's own simulated South Delhi scenario, not the real story's "
-            "location or details)."
-        )
+        if trigger.get("location_id"):
+            system_text += (
+                f' Signal source: live news — "{headline}" (headline used only to '
+                "decide the incident type; location and response are this "
+                "system's own simulated South Delhi scenario, not the real story's "
+                "location or details)."
+            )
+        else:
+            system_text += (
+                f' Signal source: live news — "{headline}", geocoded to this real '
+                "location and district — the response below runs against the "
+                "district's real jurisdiction, not a seeded pilot ward."
+            )
     incident.log("system", "system", system_text, trigger=trigger)
     return incident
 
@@ -114,31 +159,44 @@ async def run_intel_phase(incident: Incident, trigger: dict) -> None:
     text = await run_agent_turn(build_intel_agent(), prompt)
     incident.log("intel_agent", "reasoning", text)
 
-    if incident.scenario == "building_collapse":
-        epicenter_id = trigger.get("location_id", "satya-niketan")
-        affected = tools.get_nearby_localities(epicenter_id, radius=2)
+    location_id = trigger.get("location_id")
+    if location_id:
+        # Pilot ward — existing schematic-neighborhood behavior, unchanged.
+        if incident.scenario in ("building_collapse", "fire"):
+            affected = tools.get_nearby_localities(location_id, radius=2)
+        else:
+            affected = tools.get_affected_wards(risk_level="high")
+        incident.affected_wards = [w["name"] for w in affected]
+        incident.plan_state["affected_ward_ids"] = [w["id"] for w in affected]
     else:
-        affected = tools.get_affected_wards(risk_level="high")
-    incident.affected_wards = [w["name"] for w in affected]
-    incident.plan_state["affected_ward_ids"] = [w["id"] for w in affected]
+        # Anywhere else in Delhi — the one real, geocoded locality this
+        # story is actually about. No schematic neighborhood data exists
+        # outside the five pilot wards, so this doesn't invent one.
+        incident.affected_wards = [incident.location]
+
     incident.log(
         "intel_agent",
         "decision",
         f"Affected area identified: {', '.join(incident.affected_wards)}",
     )
 
-    jurisdiction = _primary_jurisdiction(incident)
+    jurisdiction = _resolve_jurisdiction(incident, trigger)
     if jurisdiction:
         incident.plan_state["jurisdiction"] = jurisdiction
-        incident.log(
-            "intel_agent",
-            "jurisdiction",
-            f"Jurisdiction identified — {jurisdiction['police_station']} ({jurisdiction['police_district']}); "
-            f"{jurisdiction['mcd_ward']} ({jurisdiction['mcd_zone']}); {jurisdiction['sdm_office']}; "
-            f"{jurisdiction['mla_office']}; {jurisdiction['mp_office']}. Local representatives, the "
-            "sub-divisional magistrate, and the station have been briefed automatically.",
-            jurisdiction=jurisdiction,
-        )
+        if "police_station" in jurisdiction:
+            message = (
+                f"Jurisdiction identified — {jurisdiction['police_station']} ({jurisdiction['police_district']}); "
+                f"{jurisdiction['mcd_ward']} ({jurisdiction['mcd_zone']}); {jurisdiction['sdm_office']}; "
+                f"{jurisdiction['mla_office']}; {jurisdiction['mp_office']}. Local representatives, the "
+                "sub-divisional magistrate, and the station have been briefed automatically."
+            )
+        else:
+            message = (
+                f"Jurisdiction identified — {jurisdiction['district']} district: {jurisdiction['dcp_office']}; "
+                f"{jurisdiction['mcd_zone']}; {jurisdiction['dm_office']}. District authorities briefed "
+                "automatically."
+            )
+        incident.log("intel_agent", "jurisdiction", message, jurisdiction=jurisdiction)
 
 
 async def run_resource_phase(incident: Incident) -> None:
@@ -154,6 +212,9 @@ async def run_resource_phase(incident: Incident) -> None:
     # recommendation the Resource Agent's reasoning above describes.
     if incident.scenario == "building_collapse":
         t1 = Task(title="Structural assessment & rescue", owner_agent="Fire & Rescue Unit", ward=site)
+        t2 = Task(title="Area cordon & crowd control", owner_agent="Rapid Action Team", ward=site)
+    elif incident.scenario == "fire":
+        t1 = Task(title="Fire suppression & search", owner_agent="Fire & Rescue Unit", ward=site)
         t2 = Task(title="Area cordon & crowd control", owner_agent="Rapid Action Team", ward=site)
     else:
         t1 = Task(title="Drainage inspection", owner_agent="Fire & Rescue Unit", ward=site)
@@ -206,8 +267,7 @@ async def _policy_check(incident: Incident, action_summary: str, amount_inr: flo
 
 async def run_dispatch_phase(incident: Incident) -> None:
     """Dispatches the two auto-approved tasks (drainage + general deployment)."""
-    directory = tools._load("directory.json")  # noqa: SLF001 - internal helper reused intentionally
-    responders_by_team = {r["team"]: r for r in directory["responders"]}
+    responders_by_team = _responders_for(incident)
 
     for task in incident.tasks:
         if task.owner_agent == "Medical/Ambulance Unit":
@@ -217,15 +277,15 @@ async def run_dispatch_phase(incident: Incident) -> None:
             continue
         responder = responders_by_team.get(task.owner_agent)
         message = f"{task.owner_agent}, deploy to {task.ward} for {task.title.lower()}."
-        comms_prompt = f"Notify {responder['name']} ({responder['id']}) with: {message}"
+        comms_prompt = f"Notify {responder['name']} ({responder['team']}) with: {message}"
         comms_text = await run_agent_turn(build_comms_agent(), comms_prompt)
         incident.log("comms_agent", "message", comms_text, task_id=task.id)
-        result = tools.contact_responder(responder["id"], message)
+        result = tools.simulate_contact(responder["name"], responder["team"], message)
         task.status = TaskStatus.IN_PROGRESS if result["status"] == "confirmed" else TaskStatus.FAILED
         incident.log(
             "comms_agent",
             "tool_call",
-            f"contact_responder({responder['id']}) -> {result['status']}",
+            f"contact({responder['name']}) -> {result['status']}",
             task_id=task.id,
         )
 
@@ -280,11 +340,12 @@ async def finalize_response(incident: Incident) -> None:
 
 
 async def _complete_hospital_task(incident: Incident, task: Task) -> None:
-    directory = tools._load("directory.json")  # noqa: SLF001
-    responder = next(r for r in directory["responders"] if r["team"] == "Medical/Ambulance Unit")
-    result = tools.contact_responder(responder["id"], f"Deploy to {task.ward}, hospital access priority.")
+    responder = _responders_for(incident)["Medical/Ambulance Unit"]
+    result = tools.simulate_contact(
+        responder["name"], responder["team"], f"Deploy to {task.ward}, hospital access priority."
+    )
     task.status = TaskStatus.COMPLETED if result["status"] == "confirmed" else TaskStatus.FAILED
-    incident.log("comms_agent", "tool_call", f"contact_responder({responder['id']}) -> {result['status']}", task_id=task.id)
+    incident.log("comms_agent", "tool_call", f"contact({responder['name']}) -> {result['status']}", task_id=task.id)
 
 
 async def resolve_approval(incident: Incident, approval_id: str, approve: bool) -> None:

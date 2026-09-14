@@ -17,6 +17,7 @@ from sse_starlette.sse import EventSourceResponse
 
 import incident_engine
 import news_feed
+from agents import signoff_call
 from models import Comment, Incident, new_id, now
 from store import get_store
 
@@ -222,10 +223,62 @@ async def _run_and_stream(incident: Incident, trigger: dict) -> None:
 
         await incident_engine.simulate_hospital_task_failure(incident)
         flush("failure_and_escalation")
+
+        _place_signoff_calls(incident)
     except Exception:
         logger.exception("Incident run failed for %s", incident.id)
         incident.log("system", "error", "Incident processing failed — see server logs.")
         flush("error")
+
+
+# Chief Minister, Government of NCT of Delhi — must match frontend/lib/personas.ts's
+# CURRENT_ACTOR exactly, since a phone confirmation is attributed as that same actor.
+SIGNOFF_ACTOR_NAME = os.getenv("CALLE_SIGNOFF_ACTOR_NAME", "Chief Minister, Government of NCT of Delhi")
+
+
+def _place_signoff_calls(incident: Incident) -> None:
+    """Fires a real (or, unconfigured, dry-run) sign-off phone call for
+    every DDMA-tier approval this incident just auto-authorized — DDMA is
+    chaired by the Chief Minister, so this is a decision made in that
+    person's name before they've actually seen it. Fire-and-forget: the
+    incident already resolved itself autonomously: this call can only
+    confirm that stands or override it, never block or delay it."""
+    for approval in incident.approvals:
+        if approval.authority_tier and "DDMA" in approval.authority_tier and not approval.overridden_by:
+            asyncio.create_task(_run_signoff_call(incident.id, approval.id))
+
+
+async def _run_signoff_call(incident_id: str, approval_id: str) -> None:
+    incident = store.get(incident_id)
+    if incident is None:
+        return
+    approval = next((a for a in incident.approvals if a.id == approval_id), None)
+    if approval is None:
+        return
+
+    result = await signoff_call.request_signoff_call(
+        actor_name=SIGNOFF_ACTOR_NAME,
+        incident_id=incident_id,
+        approval_id=approval_id,
+        incident_title=incident.title,
+        action_summary=approval.action_summary,
+        authority_tier=approval.authority_tier or "",
+        amount_inr=approval.amount_inr,
+    )
+    logger.info(
+        "Sign-off call for %s/%s -> %s%s",
+        incident_id, approval_id, result["decision"], " (dry run)" if result["dry_run"] else "",
+    )
+
+    if result["decision"] in ("confirm", "override"):
+        # Same function the dashboard's Confirm/Override buttons call — a
+        # phone decision is just another caller of the one place that
+        # actually mutates an approval's status.
+        await incident_engine.resolve_approval(
+            incident, approval_id, result["decision"] == "confirm", f"{SIGNOFF_ACTOR_NAME} (via phone)"
+        )
+        store.save(incident)
+        _broadcast(incident, {"type": "state", "phase": "signoff_call", "incident": json.loads(incident.model_dump_json())})
 
 
 class TriggerPayload(BaseModel):

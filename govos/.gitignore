@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 .venv/
+.venv*/
 backend/.local_state/
 backend/.env
 

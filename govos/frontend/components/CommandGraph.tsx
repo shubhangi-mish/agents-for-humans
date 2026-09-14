@@ -16,21 +16,8 @@ export default function CommandGraph({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 20 }}>
-        <div style={{ fontSize: 11.5, color: theme.textMuted, textTransform: "uppercase", letterSpacing: 0.6, fontWeight: 600 }}>
-          Command &amp; response graph
-        </div>
-        <div
-          style={{
-            fontSize: 9.5,
-            color: theme.statusResolved,
-            border: `1px solid ${theme.statusResolved}44`,
-            borderRadius: 4,
-            padding: "1px 7px",
-          }}
-        >
-          Autonomous — no sign-off required
-        </div>
+      <div style={{ fontSize: 13, color: theme.textMuted, textTransform: "uppercase", letterSpacing: 0.6, fontWeight: 700, marginBottom: 22 }}>
+        Command &amp; response graph
       </div>
 
       {override && (
@@ -45,7 +32,7 @@ export default function CommandGraph({
             marginBottom: 18,
           }}
         >
-          Field Command override — {override.text}
+          {override.text}
         </div>
       )}
 

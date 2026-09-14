@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Incident, NewsItem, StreamMessage } from "./types";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AuditRow, Incident, NewsItem, StreamMessage } from "./types";
 
 const API = process.env.NEXT_PUBLIC_GOVOS_API ?? "http://localhost:8080";
 
@@ -150,13 +150,58 @@ export async function refreshNews(): Promise<{ new_items: number }> {
 export async function resolveApproval(
   incidentId: string,
   approvalId: string,
-  approve: boolean
+  approve: boolean,
+  actor: string
 ): Promise<Incident> {
   const res = await fetch(`${API}/incidents/${incidentId}/approve`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ approval_id: approvalId, approve }),
+    body: JSON.stringify({ approval_id: approvalId, approve, actor }),
   });
   if (!res.ok) throw new Error(`approve failed: ${res.status}`);
   return res.json();
+}
+
+/** Posts a note from the signed-in persona onto an incident — every other
+ * authority who opens it sees the same comment thread, since it's stored
+ * on the incident itself, not per-viewer. The new state comes back over
+ * the already-open /stream/{id} connection, so callers don't need to do
+ * anything with this function's return value. */
+export async function postComment(
+  incidentId: string,
+  author: string,
+  authorRole: string,
+  text: string
+): Promise<Incident> {
+  const res = await fetch(`${API}/incidents/${incidentId}/comments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ author, author_role: authorRole, text }),
+  });
+  if (!res.ok) throw new Error(`comment failed: ${res.status}`);
+  return res.json();
+}
+
+/** The CM's (or any signed-in authority's) city-wide oversight view — every
+ * authorization across every incident, newest first, refetched on demand
+ * rather than streamed (this is a low-frequency "check the record" view,
+ * not something that needs live push updates). */
+export function useAuditLog() {
+  const [rows, setRows] = useState<AuditRow[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const refresh = useCallback(() => {
+    setLoading(true);
+    fetch(`${API}/audit`)
+      .then((r) => r.json())
+      .then((list: AuditRow[]) => setRows(list))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  return { rows, loading, refresh };
 }

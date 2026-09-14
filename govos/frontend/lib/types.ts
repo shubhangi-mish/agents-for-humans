@@ -30,8 +30,23 @@ export interface Approval {
   status: "pending" | "approved" | "rejected";
   authorized_by: string | null;
   authority_tier: string | null;
+  overridden_by: string | null;
   created_at: number;
   resolved_at: number | null;
+}
+
+export interface AuditRow extends Approval {
+  incident_id: string;
+  incident_title: string;
+  incident_status: IncidentStatus;
+}
+
+export interface Comment {
+  id: string;
+  author: string;
+  author_role: string;
+  text: string;
+  created_at: number;
 }
 
 export interface Incident {
@@ -50,6 +65,7 @@ export interface Incident {
   tasks: Task[];
   approvals: Approval[];
   events: GovEvent[];
+  comments: Comment[];
   plan_state: Record<string, unknown>;
   created_at: number;
   updated_at: number;

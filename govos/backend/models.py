@@ -63,9 +63,24 @@ class Approval(BaseModel):
     # case a human later overrides via /approve.
     authorized_by: Optional[str] = None
     authority_tier: Optional[str] = None
+    # Set only if a human later overrides this approval — who did it (e.g.
+    # "Chief Minister, GNCTD"), for an audit trail that names a real actor
+    # rather than an anonymous "Field Command".
+    overridden_by: Optional[str] = None
     resume_token: Optional[str] = None
     created_at: float = Field(default_factory=now)
     resolved_at: Optional[float] = None
+
+
+class Comment(BaseModel):
+    """A note any signed-in authority leaves on an incident — visible to
+    every other authority who opens it (there's no per-viewer filtering),
+    which is the point: it's a shared record, not a private aside."""
+    id: str = Field(default_factory=lambda: new_id("cmt"))
+    author: str
+    author_role: str
+    text: str
+    created_at: float = Field(default_factory=now)
 
 
 class Incident(BaseModel):
@@ -89,6 +104,7 @@ class Incident(BaseModel):
     tasks: list[Task] = Field(default_factory=list)
     approvals: list[Approval] = Field(default_factory=list)
     events: list[Event] = Field(default_factory=list)
+    comments: list[Comment] = Field(default_factory=list)
     # arbitrary bag the orchestrator uses to remember where it left off
     plan_state: dict[str, Any] = Field(default_factory=dict)
     created_at: float = Field(default_factory=now)

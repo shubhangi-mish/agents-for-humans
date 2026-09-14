@@ -1,3 +1,5 @@
+import type { CSSProperties } from "react";
+
 /** Shared design tokens. Cool, muted, enterprise-console palette — slate
  * background, blue/cyan accent, no gold/tricolor/emoji-illustration
  * elements. Referenced by every component instead of scattering hex
@@ -31,6 +33,16 @@ export const theme = {
   kindAccident: "#d9853f",
   kindOther: "#6b7684",
 } as const;
+
+/** A subtle dot-grid texture for page backgrounds — the modern-console look
+ * (see e.g. dashboard/landing sites with a faint dotted field behind
+ * content) instead of a flat, dull background. Cheap: two radial gradients
+ * repeated as a background-image, no image asset. */
+export const dotGridBackground: CSSProperties = {
+  backgroundColor: theme.bg,
+  backgroundImage: `radial-gradient(${theme.borderStrong} 1px, transparent 1px)`,
+  backgroundSize: "28px 28px",
+};
 
 export const STATUS_LABEL: Record<string, string> = {
   active: "In progress",

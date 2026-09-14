@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { Approval } from "@/lib/types";
 import { GraphNode, NodeStatus } from "@/lib/graph";
 import { theme } from "@/lib/theme";
+import { CURRENT_PERSONA } from "@/lib/personas";
 
 function truncate(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max)}…` : text;
@@ -123,7 +124,7 @@ export default function GraphNodeCard({
               onClick={() => setOverrideOpen(true)}
               style={{ background: "none", border: "none", padding: 0, color: theme.textMuted, fontSize: 10, textDecoration: "underline", cursor: "pointer" }}
             >
-              Field Command override…
+              Override as {CURRENT_PERSONA.name}…
             </button>
           ) : (
             <div style={{ display: "flex", gap: 6 }}>

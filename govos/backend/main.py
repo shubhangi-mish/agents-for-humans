@@ -17,7 +17,7 @@ from sse_starlette.sse import EventSourceResponse
 
 import incident_engine
 import news_feed
-from models import Incident
+from models import Comment, Incident
 from store import get_store
 
 logging.basicConfig(level=logging.INFO)
@@ -280,6 +280,26 @@ async def list_incidents() -> list[dict[str, Any]]:
     return [json.loads(i.model_dump_json()) for i in store.list()]
 
 
+@app.get("/audit")
+async def audit_log() -> list[dict[str, Any]]:
+    """Every authorization across every incident, newest first — the CM's
+    (or any signed-in authority's) city-wide oversight view of who signed
+    off on what, and whether anyone has since overridden it. Flattens
+    Approval records out of their incidents rather than making a caller
+    fetch every incident individually to reconstruct this."""
+    rows: list[dict[str, Any]] = []
+    for incident in store.list():
+        for approval in incident.approvals:
+            rows.append({
+                "incident_id": incident.id,
+                "incident_title": incident.title,
+                "incident_status": incident.status,
+                **json.loads(approval.model_dump_json()),
+            })
+    rows.sort(key=lambda r: r["created_at"], reverse=True)
+    return rows
+
+
 @app.get("/incidents/{incident_id}")
 async def get_incident(incident_id: str) -> dict[str, Any]:
     incident = store.get(incident_id)
@@ -291,25 +311,54 @@ async def get_incident(incident_id: str) -> dict[str, Any]:
 class ApprovalDecision(BaseModel):
     approval_id: str
     approve: bool
+    # Who is actually doing this override, e.g. "Chief Minister, GNCTD" —
+    # the frontend sends the signed-in persona's name+role here so the
+    # audit trail records a real actor, not an anonymous "Field Command".
+    actor: str = "Field Command"
 
 
 @app.post("/incidents/{incident_id}/approve")
 async def approve(incident_id: str, decision: ApprovalDecision) -> dict[str, Any]:
-    """Field Command override. Every authorization the incident needed was
-    already resolved by the real office that holds it (see
-    incident_engine._policy_check) the moment it came up — this endpoint is
-    the rare veto path for a human watching to override that after the
-    fact, never something the incident waits on to proceed."""
+    """Human override, attributed to whoever is signed in. Every
+    authorization the incident needed was already resolved by the real
+    office that holds it (see incident_engine._policy_check) the moment it
+    came up — this endpoint is the rare veto path for someone with real
+    standing to override that after the fact, never something the incident
+    waits on to proceed."""
     incident = store.get(incident_id)
     if incident is None:
         raise HTTPException(status_code=404, detail="incident not found")
 
     sent = len(incident.events)
-    await incident_engine.resolve_approval(incident, decision.approval_id, decision.approve)
+    await incident_engine.resolve_approval(incident, decision.approval_id, decision.approve, decision.actor)
     store.save(incident)
     for evt in incident.events[sent:]:
         _broadcast(incident, {"type": "event", "phase": "approval", "event": json.loads(evt.model_dump_json())})
     _broadcast(incident, {"type": "state", "phase": "approval", "incident": json.loads(incident.model_dump_json())})
+    return json.loads(incident.model_dump_json())
+
+
+class CommentPayload(BaseModel):
+    author: str
+    author_role: str
+    text: str
+
+
+@app.post("/incidents/{incident_id}/comments")
+async def add_comment(incident_id: str, payload: CommentPayload) -> dict[str, Any]:
+    """Any signed-in authority can leave a note on an incident — it's
+    appended to the incident's own record, so every other authority who
+    opens this incident sees it too. No per-viewer visibility filtering:
+    a shared record is the point."""
+    incident = store.get(incident_id)
+    if incident is None:
+        raise HTTPException(status_code=404, detail="incident not found")
+
+    comment = Comment(author=payload.author, author_role=payload.author_role, text=payload.text)
+    incident.comments.append(comment)
+    incident.updated_at = comment.created_at
+    store.save(incident)
+    _broadcast(incident, {"type": "state", "phase": "comment", "incident": json.loads(incident.model_dump_json())})
     return json.loads(incident.model_dump_json())
 
 

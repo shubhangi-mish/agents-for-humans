@@ -348,14 +348,19 @@ async def _complete_hospital_task(incident: Incident, task: Task) -> None:
     incident.log("comms_agent", "tool_call", f"contact({responder['name']}) -> {result['status']}", task_id=task.id)
 
 
-async def resolve_approval(incident: Incident, approval_id: str, approve: bool) -> None:
-    """Field Command override — the rare exception path, not the default
-    one. Every authorization in this incident was already resolved by the
-    real office that holds it the moment it came up (see _policy_check); a
-    human never has to act for the incident to proceed. This endpoint exists
-    only so someone watching can veto a decision after the fact. Confirming
-    an already-authorized action is a no-op; rejecting one unwinds the task
-    it authorized and reopens the incident."""
+async def resolve_approval(
+    incident: Incident, approval_id: str, approve: bool, actor: str = "Field Command"
+) -> None:
+    """Human override — the rare exception path, not the default one. Every
+    authorization in this incident was already resolved by the real office
+    that holds it the moment it came up (see _policy_check); a human never
+    has to act for the incident to proceed. This endpoint exists only so
+    someone with real standing — identified by `actor`, e.g. "Chief
+    Minister, GNCTD" — can veto a decision after the fact. Confirming an
+    already-authorized action is a no-op; rejecting one unwinds the task it
+    authorized and reopens the incident. The actor is recorded on the
+    approval itself, not just the log line, so the audit trail always shows
+    who actually signed off."""
     approval = next((a for a in incident.approvals if a.id == approval_id), None)
     if approval is None:
         raise ValueError(f"Unknown approval {approval_id}")
@@ -363,11 +368,13 @@ async def resolve_approval(incident: Incident, approval_id: str, approve: bool) 
     was_approved = approval.status == "approved"
     approval.status = "approved" if approve else "rejected"
     approval.resolved_at = now()
+    approval.overridden_by = actor
     incident.log(
         "human_override",
         "decision",
-        f"Field Command override — {'confirmed' if approve else 'rejected'}: {approval.action_summary}",
+        f"{actor} override — {'confirmed' if approve else 'rejected'}: {approval.action_summary}",
         approval_id=approval_id,
+        actor=actor,
     )
 
     if not approve and was_approved and "hospital" in approval.action_summary.lower():

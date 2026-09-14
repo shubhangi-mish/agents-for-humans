@@ -4,8 +4,9 @@ import { useState } from "react";
 import CityMap from "@/components/CityMap";
 import EventStream from "@/components/EventStream";
 import KanbanBoard from "@/components/KanbanBoard";
+import NewsFeed from "@/components/NewsFeed";
 import OfficeSections from "@/components/OfficeSections";
-import { resolveApproval, useEventStream, useIncidentList } from "@/lib/useEventStream";
+import { resolveApproval, useEventStream, useIncidentList, useNewsFeed } from "@/lib/useEventStream";
 
 const STATUS_LABEL: Record<string, string> = {
   active: "Active",
@@ -28,6 +29,7 @@ const SECTION: React.CSSProperties = {
 
 export default function Page() {
   const incidents = useIncidentList();
+  const newsItems = useNewsFeed();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const incident = useEventStream(selectedId);
 
@@ -38,8 +40,11 @@ export default function Page() {
 
   if (!selectedId || !incident) {
     return (
-      <main style={{ height: "100vh", width: "100vw" }}>
-        <CityMap incidents={incidents} onSelect={setSelectedId} />
+      <main style={{ height: "100vh", width: "100vw", display: "flex" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <CityMap incidents={incidents} newsItems={newsItems} onSelect={setSelectedId} />
+        </div>
+        <NewsFeed items={newsItems} />
       </main>
     );
   }

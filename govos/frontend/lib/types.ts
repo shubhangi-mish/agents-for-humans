@@ -57,3 +57,18 @@ export interface StreamMessage {
   event?: GovEvent;
   incident?: Incident;
 }
+
+export type NewsKind = "fire" | "collapse" | "flood" | "crime" | "accident" | "other";
+
+export interface NewsItem {
+  id: string;
+  headline: string;
+  link: string;
+  source: string;
+  published: string | null;
+  kind: NewsKind;
+  locality: string | null;
+  lat: number | null;
+  lng: number | null;
+  fetched_at: number;
+}

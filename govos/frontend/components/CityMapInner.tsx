@@ -3,9 +3,10 @@
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
-import { Incident } from "@/lib/types";
+import { Incident, NewsItem } from "@/lib/types";
 import { DELHI_CENTER, REAL_LOCATIONS } from "@/lib/geo";
 import { TILE_ATTRIBUTION, TILE_OPTIONS, TILE_URL } from "@/lib/mapTiles";
+import { NEWS_KIND_ICON } from "@/lib/newsKind";
 
 const STATUS_COLOR: Record<Incident["status"], string> = {
   active: "#5b9dd9",
@@ -60,6 +61,27 @@ function pinIcon(scenario: string, color: string, pulsing: boolean, fromRealNews
   });
 }
 
+// A live news pin is deliberately smaller and quieter than an active-incident
+// pin — it's a real report the response engine hasn't necessarily acted on,
+// not a confirmed simulated incident. The kind emoji is the only thing that
+// changes per story.
+function newsIcon(kind: NewsItem["kind"]) {
+  return L.divIcon({
+    className: "govos-div-icon",
+    html: `
+      <div style="
+          width:22px;height:22px;border-radius:50%;
+          background:#161616cc; border:1.5px solid #d4af3799;
+          display:flex;align-items:center;justify-content:center;
+          font-size:11px; box-shadow:0 2px 6px rgba(0,0,0,.5);
+        ">${NEWS_KIND_ICON[kind]}</div>
+    `,
+    iconSize: [22, 22],
+    iconAnchor: [11, 11],
+    popupAnchor: [0, -10],
+  });
+}
+
 function landmarkIcon(kind: string) {
   const color = kind === "hospital" ? "#7a3b3b" : kind === "base" ? "#3a4a40" : "#3a3a3a";
   return L.divIcon({
@@ -93,12 +115,15 @@ function fanOut(incidents: Incident[]): { incident: Incident; lat: number; lng: 
 
 export default function CityMapInner({
   incidents,
+  newsItems,
   onSelect,
 }: {
   incidents: Incident[];
+  newsItems: NewsItem[];
   onSelect: (id: string) => void;
 }) {
   const pins = fanOut(incidents);
+  const geocodedNews = newsItems.filter((n): n is NewsItem & { lat: number; lng: number } => n.lat != null && n.lng != null);
 
   return (
     <MapContainer
@@ -134,6 +159,18 @@ export default function CityMapInner({
             {incident.source_headline && (
               <div style={{ marginTop: 4, fontSize: 11, color: "#555" }}>📰 {incident.source_headline}</div>
             )}
+          </Popup>
+        </Marker>
+      ))}
+
+      {geocodedNews.map((item) => (
+        <Marker key={item.id} position={[item.lat, item.lng]} icon={newsIcon(item.kind)}>
+          <Popup>
+            <div style={{ fontWeight: 600, fontSize: 12 }}>{item.headline}</div>
+            {item.locality && <div style={{ fontSize: 11, color: "#555", marginTop: 3 }}>📍 {item.locality}</div>}
+            <a href={item.link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11 }}>
+              Read source →
+            </a>
           </Popup>
         </Marker>
       ))}

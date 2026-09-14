@@ -1,71 +1,123 @@
-import { Incident } from "./types";
+import { GovEvent, Incident } from "./types";
 
 export interface OfficeNode {
-  id: "control-room" | "district-control" | "commissioner" | "cm-office" | "field-command";
+  id: string;
   office: string;
   officer: string;
   role: string;
+  eyebrow: string;
   message: string | null;
 }
 
-const NARROW_ESCALATION_THRESHOLD = 1_000_000;
+interface Jurisdiction {
+  assembly_constituency: string;
+  mla_office: string;
+  lok_sabha_constituency: string;
+  mp_office: string;
+  police_station: string;
+  police_district: string;
+  mcd_ward: string;
+  mcd_zone: string;
+  djb_zone: string;
+  discom: string;
+}
 
-/** Every possible office slot in fixed order, for a static scene layout. */
-export const ALL_OFFICE_SLOTS: Omit<OfficeNode, "message">[] = [
-  { id: "control-room", office: "MCD South Zone — Disaster Management Cell", officer: "Duty Officer R. Sharma", role: "Control Room" },
-  { id: "district-control", office: "DCP South West District Control Room", officer: "Officer-in-Charge S. Verma", role: "District Control" },
-  { id: "commissioner", office: "Commissioner's Office", officer: "Coordination Officer A. Bhatia", role: "City Coordination" },
-  { id: "cm-office", office: "CM Office — Situation Room", officer: "Situation Officer M. Iyer", role: "State Situation Desk" },
-  { id: "field-command", office: "Field Command", officer: "You", role: "Decision" },
-];
+function findLast(events: GovEvent[], pred: (e: GovEvent) => boolean): GovEvent | undefined {
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (pred(events[i])) return events[i];
+  }
+  return undefined;
+}
 
-/** Dynamically assembles the office chain for this specific incident — which
- * offices even get involved is derived from the incident's own real events,
- * not a fixed roster. A small issue never reaches beyond the control room;
- * a large one climbs all the way up. Officer names are fictional
- * placeholders for "who's on duty at that desk" — the office is real, the
- * person is not a real official. */
+function officerFor(office: string): string {
+  if (office.includes("District Magistrate")) return "Duty Officer S. Verma";
+  if (office.includes("Commissioner of Police")) return "Coordination Officer V. Menon";
+  if (office.includes("DDMA")) return "Situation Officer M. Iyer";
+  if (office.includes("MLA")) return "Constituency Office Secretary A. Bhatia";
+  if (office.includes("PS ") || office.toLowerCase().includes("police station")) return "Station House Officer R. Sharma";
+  return "Control Room Duty Officer P. Singh";
+}
+
+function eyebrowFor(office: string): string {
+  if (office.includes("Commissioner of Police") || office.startsWith("PS ")) return "DELHI POLICE";
+  if (office.includes("MLA") || office.includes("DDMA")) return "GOVERNMENT OF NCT OF DELHI";
+  if (office.includes("District Magistrate")) return "GNCTD — REVENUE DEPARTMENT";
+  return "MUNICIPAL CORPORATION OF DELHI";
+}
+
+/** Assembles the real jurisdiction chain for this specific incident. Which
+ * offices show up, and in what order, comes entirely from the incident's own
+ * events — the local police station and MLA office are named the moment the
+ * ward's jurisdiction is resolved, and each authority tier (District
+ * Magistrate / Police Commissioner / DDMA) appears only if that incident
+ * actually needed it. Nothing here is a fixed ladder, and nothing waits on a
+ * human — every node's message is already a resolved action, not a pending
+ * request. Officer names are fictional placeholders for "who's on duty at
+ * that desk"; the office itself is real. */
 export function buildChain(incident: Incident): OfficeNode[] {
   const events = incident.events;
-  const findLast = (pred: (e: Incident["events"][number]) => boolean) => [...events].reverse().find(pred);
-
   const chain: OfficeNode[] = [];
 
-  const intel = findLast((e) => e.agent === "intel_agent" && e.kind === "reasoning");
-  const resource = findLast((e) => e.agent === "resource_agent" && e.kind === "reasoning");
-  chain.push({ ...ALL_OFFICE_SLOTS[0], message: (resource ?? intel)?.text ?? null });
+  const jurisdictionEvt = findLast(events, (e) => e.kind === "jurisdiction");
+  const jurisdiction = jurisdictionEvt?.data?.jurisdiction as Jurisdiction | undefined;
 
-  const approval = incident.approvals[0];
-  const policyDecision = findLast(
-    (e) => e.agent === "policy_agent" && e.kind === "decision" && e.text.includes("REQUIRES_APPROVAL")
-  );
-  if (approval || policyDecision) {
-    chain.push({ ...ALL_OFFICE_SLOTS[1], message: policyDecision?.text ?? approval?.action_summary ?? null });
-  }
-
-  const orchestrator = findLast((e) => e.agent === "orchestrator" && e.kind === "reasoning");
-  if (orchestrator) {
-    chain.push({ ...ALL_OFFICE_SLOTS[2], message: orchestrator.text });
-  }
-
-  const needsNdrf = incident.tasks.some((t) => t.owner_agent === "NDRF Response Team");
-  const bigApproval = incident.approvals.find((a) => (a.amount_inr ?? 0) >= NARROW_ESCALATION_THRESHOLD);
-  if (needsNdrf || bigApproval) {
+  if (jurisdiction) {
     chain.push({
-      ...ALL_OFFICE_SLOTS[3],
-      message: bigApproval
-        ? `Briefed — ₹${bigApproval.amount_inr!.toLocaleString("en-IN")} emergency procurement authorized.`
-        : "Briefed on NDRF specialist deployment.",
+      id: "police-station",
+      office: jurisdiction.police_station,
+      officer: officerFor(jurisdiction.police_station),
+      role: `${jurisdiction.police_district} — cordon & law and order`,
+      eyebrow: "DELHI POLICE",
+      message: `Cordon and crowd-control support requested for ${incident.affected_wards[0] ?? incident.location}.`,
     });
   }
 
-  const humanDecision = findLast((e) => e.agent === "human" && e.kind === "decision");
-  if (humanDecision) {
-    const approved = humanDecision.text.startsWith("Human approved");
+  const resource = findLast(events, (e) => e.agent === "resource_agent" && e.kind === "reasoning");
+  const intel = findLast(events, (e) => e.agent === "intel_agent" && e.kind === "reasoning");
+  chain.push({
+    id: "control-room",
+    office: jurisdiction?.mcd_zone ?? "MCD South Zone — Disaster Management Cell",
+    officer: officerFor(jurisdiction?.mcd_zone ?? ""),
+    role: jurisdiction ? `${jurisdiction.mcd_ward} — zonal control room` : "Zonal control room",
+    eyebrow: "MUNICIPAL CORPORATION OF DELHI",
+    message: (resource ?? intel)?.text ?? null,
+  });
+
+  if (jurisdiction) {
     chain.push({
-      ...ALL_OFFICE_SLOTS[4],
-      role: approved ? "Order approved" : "Order rejected",
-      message: humanDecision.text,
+      id: "mla-office",
+      office: jurisdiction.mla_office,
+      officer: officerFor(jurisdiction.mla_office),
+      role: `MLA, ${jurisdiction.assembly_constituency}`,
+      eyebrow: "GOVERNMENT OF NCT OF DELHI",
+      message: `Constituency briefed — response under way in ${incident.affected_wards.join(", ")}.`,
+    });
+  }
+
+  for (const approval of incident.approvals) {
+    if (!approval.authorized_by) continue;
+    chain.push({
+      id: `auth-${approval.id}`,
+      office: approval.authorized_by,
+      officer: officerFor(approval.authorized_by),
+      role: approval.authority_tier ?? "Authorizing office",
+      eyebrow: eyebrowFor(approval.authorized_by),
+      message: `Authorized — ${approval.action_summary}${
+        approval.amount_inr ? ` (₹${approval.amount_inr.toLocaleString("en-IN")})` : ""
+      }.`,
+    });
+  }
+
+  const override = findLast(events, (e) => e.agent === "human_override" && e.kind === "decision");
+  if (override) {
+    const rejected = override.text.toLowerCase().includes("rejected");
+    chain.push({
+      id: "field-override",
+      office: "Field Command",
+      officer: "Duty Officer on shift",
+      role: rejected ? "Human override — rejected" : "Human override — confirmed",
+      eyebrow: "INCIDENT COMMAND",
+      message: override.text,
     });
   }
 

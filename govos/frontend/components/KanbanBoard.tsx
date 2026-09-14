@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
 import { Approval, Incident, Task } from "@/lib/types";
 import { TEAM_EMOJI } from "@/lib/teams";
@@ -8,7 +9,7 @@ type ColumnId = "todo" | "in_progress" | "blocked" | "done";
 const COLUMNS: { id: ColumnId; label: string; color: string }[] = [
   { id: "todo", label: "To Do", color: "#777" },
   { id: "in_progress", label: "In Progress", color: "#5b9dd9" },
-  { id: "blocked", label: "Blocked / Needs Decision", color: "#e0b34d" },
+  { id: "blocked", label: "Escalated — auto-authorized", color: "#e0b34d" },
   { id: "done", label: "Done", color: "#6bbf7b" },
 ];
 
@@ -85,6 +86,12 @@ function TaskCard({ task }: { task: Task }) {
   );
 }
 
+/** Every approval here already resolved itself — some real office authorized
+ * it the instant it came up (see backend/incident_engine.py's
+ * AUTHORITY_TIERS). This card is a record of that, not a request. The
+ * override control is the rare exception path for someone watching to veto
+ * a decision after the fact — it's collapsed by default so it never reads
+ * as "waiting on you". */
 function ApprovalCardCompact({
   approval,
   onDecide,
@@ -92,6 +99,9 @@ function ApprovalCardCompact({
   approval: Approval;
   onDecide: (approve: boolean) => void;
 }) {
+  const [overrideOpen, setOverrideOpen] = useState(false);
+  const rejected = approval.status === "rejected";
+
   return (
     <motion.div
       layoutId={`appr-${approval.id}`}
@@ -101,8 +111,8 @@ function ApprovalCardCompact({
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9 }}
       style={{
-        background: "#221a0f",
-        border: "1px solid #e0b34d66",
+        background: rejected ? "#241414" : "#151f18",
+        border: `1px solid ${rejected ? "#e0655566" : "#6bbf7b44"}`,
         borderRadius: 8,
         padding: 10,
         display: "flex",
@@ -110,25 +120,53 @@ function ApprovalCardCompact({
         gap: 6,
       }}
     >
-      <div style={{ fontSize: 10.5, color: "#e0b34d", fontWeight: 700, letterSpacing: 0.3 }}>APPROVAL NEEDED</div>
+      <div style={{ fontSize: 10.5, color: rejected ? "#e08a7d" : "#6bbf7b", fontWeight: 700, letterSpacing: 0.3 }}>
+        {rejected ? "OVERRIDDEN — REJECTED" : "AUTHORIZED"}
+      </div>
       <div style={{ fontSize: 12, color: "#eee" }}>{approval.action_summary}</div>
+      {approval.authorized_by && (
+        <div style={{ fontSize: 10.5, color: "#999" }}>
+          by <strong style={{ color: "#bbb" }}>{approval.authorized_by}</strong>
+          {approval.authority_tier ? ` — ${approval.authority_tier}` : ""}
+        </div>
+      )}
       {approval.amount_inr != null && (
         <div style={{ fontSize: 11, color: "#ccc" }}>₹{approval.amount_inr.toLocaleString("en-IN")}</div>
       )}
-      <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
+
+      {!overrideOpen ? (
         <button
-          onClick={() => onDecide(true)}
-          style={{ flex: 1, background: "#2c5c3d", color: "#eafff0", border: "none", borderRadius: 5, padding: "5px 0", cursor: "pointer", fontSize: 11.5 }}
+          onClick={() => setOverrideOpen(true)}
+          style={{
+            alignSelf: "flex-start",
+            background: "none",
+            color: "#666",
+            border: "none",
+            padding: 0,
+            cursor: "pointer",
+            fontSize: 10,
+            textDecoration: "underline",
+            marginTop: 2,
+          }}
         >
-          Approve
+          Field Command override…
         </button>
-        <button
-          onClick={() => onDecide(false)}
-          style={{ flex: 1, background: "#3a2020", color: "#ffd9d9", border: "none", borderRadius: 5, padding: "5px 0", cursor: "pointer", fontSize: 11.5 }}
-        >
-          Reject
-        </button>
-      </div>
+      ) : (
+        <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
+          <button
+            onClick={() => onDecide(true)}
+            style={{ flex: 1, background: "#2c5c3d", color: "#eafff0", border: "none", borderRadius: 5, padding: "5px 0", cursor: "pointer", fontSize: 11.5 }}
+          >
+            Confirm
+          </button>
+          <button
+            onClick={() => onDecide(false)}
+            style={{ flex: 1, background: "#3a2020", color: "#ffd9d9", border: "none", borderRadius: 5, padding: "5px 0", cursor: "pointer", fontSize: 11.5 }}
+          >
+            Reject
+          </button>
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -140,14 +178,14 @@ export default function KanbanBoard({
   incident: Incident;
   onDecideApproval: (approvalId: string, approve: boolean) => void;
 }) {
-  const pendingApprovals = incident.approvals.filter((a) => a.status === "pending");
+  const approvalsToShow = incident.approvals;
 
   return (
     <LayoutGroup>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, alignItems: "start" }}>
         {COLUMNS.map((col) => {
           const tasks = incident.tasks.filter((t) => columnForTask(t.status) === col.id);
-          const approvalsHere = col.id === "blocked" ? pendingApprovals : [];
+          const approvalsHere = col.id === "blocked" ? approvalsToShow : [];
           const count = tasks.length + approvalsHere.length;
 
           return (

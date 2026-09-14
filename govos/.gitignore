@@ -7,4 +7,3 @@ backend/.env
 node_modules/
 .next/
 frontend/.env.local
-GOVOS_HACKATHON_PLAN.md

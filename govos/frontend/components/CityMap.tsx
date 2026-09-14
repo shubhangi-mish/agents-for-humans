@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { Incident } from "@/lib/types";
+import { Incident, NewsItem } from "@/lib/types";
 
 const CityMapInner = dynamic(() => import("./CityMapInner"), {
   ssr: false,
@@ -14,17 +14,22 @@ const CityMapInner = dynamic(() => import("./CityMapInner"), {
 
 export default function CityMap({
   incidents,
+  newsItems,
   onSelect,
 }: {
   incidents: Incident[];
+  newsItems: NewsItem[];
   onSelect: (incidentId: string) => void;
 }) {
   const open = incidents.filter((i) => i.status !== "resolved");
   const resolved = incidents.filter((i) => i.status === "resolved");
+  const officesEngaged = new Set(
+    incidents.flatMap((i) => i.approvals.map((a) => a.authorized_by).filter(Boolean))
+  ).size;
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      <CityMapInner incidents={incidents} onSelect={onSelect} />
+      <CityMapInner incidents={incidents} newsItems={newsItems} onSelect={onSelect} />
 
       <div
         style={{
@@ -37,11 +42,22 @@ export default function CityMap({
           borderRadius: 8,
           padding: "8px 12px",
           pointerEvents: "none",
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
         }}
       >
-        <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: 0.5 }}>GOVOS</div>
-        <div style={{ fontSize: 11, color: "#888" }}>
-          {open.length} active incident{open.length === 1 ? "" : "s"} · {resolved.length} resolved
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: 0.5 }}>GOVOS</div>
+          <div style={{ fontSize: 11, color: "#888" }}>
+            {open.length} active incident{open.length === 1 ? "" : "s"} · {resolved.length} resolved
+          </div>
+        </div>
+        <div style={{ borderLeft: "1px solid #333", paddingLeft: 16, textAlign: "center" }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: "#d4af37" }}>{officesEngaged}</div>
+          <div style={{ fontSize: 9, color: "#888", textTransform: "uppercase", letterSpacing: 0.4, whiteSpace: "nowrap" }}>
+            Offices engaged
+          </div>
         </div>
       </div>
 

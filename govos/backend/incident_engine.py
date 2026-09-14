@@ -257,6 +257,26 @@ async def simulate_hospital_task_failure(incident: Incident) -> None:
     if approved:
         await _complete_hospital_task(incident, task)
 
+    await finalize_response(incident)
+
+
+async def finalize_response(incident: Incident) -> None:
+    """Closes the loop once the critical-path task is resolved: the
+    structural-assessment and cordon tasks wrap up alongside it rather than
+    sitting "in progress" forever, so the incident actually reaches
+    RESOLVED instead of accumulating unbounded — every incident this
+    pipeline starts must eventually finish on its own, exactly like the
+    auto-authorization it doesn't wait on a human for."""
+    for task in incident.tasks:
+        if task.status == TaskStatus.IN_PROGRESS:
+            task.status = TaskStatus.COMPLETED
+            incident.log(task.owner_agent, "task_completed", f"{task.title} completed.", task_id=task.id)
+
+    if incident.status != IncidentStatus.RESOLVED and all(
+        t.status in (TaskStatus.COMPLETED, TaskStatus.FAILED) for t in incident.tasks
+    ):
+        await resolve_incident(incident)
+
 
 async def _complete_hospital_task(incident: Incident, task: Task) -> None:
     directory = tools._load("directory.json")  # noqa: SLF001

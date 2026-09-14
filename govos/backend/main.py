@@ -19,6 +19,7 @@ from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 import incident_engine
+import news_feed
 from models import Incident
 from store import get_store
 
@@ -42,8 +43,16 @@ _subscribers: dict[str, list[asyncio.Queue]] = {}
 # auto-follow live activity without a human clicking a trigger button.
 _latest_subscribers: list[asyncio.Queue] = []
 
+# subscribers to the live, geocoded Delhi news feed (news_feed.py) — separate
+# from _latest_subscribers above, which only announces incidents the
+# response engine is actually running.
+_news_subscribers: list[asyncio.Queue] = []
+
 AUTO_TRIGGER_ENABLED = os.getenv("GOVOS_AUTO_TRIGGER", "true").lower() == "true"
 AUTO_TRIGGER_INTERVAL_SECONDS = int(os.getenv("GOVOS_AUTO_TRIGGER_INTERVAL_SECONDS", "90"))
+
+NEWS_FEED_ENABLED = os.getenv("GOVOS_NEWS_FEED", "true").lower() == "true"
+NEWS_FEED_POLL_INTERVAL_SECONDS = int(os.getenv("GOVOS_NEWS_FEED_INTERVAL_SECONDS", "45"))
 
 # Real South Delhi locations to draw from for auto-generated incidents —
 # mirrors backend/data/wards.json. Every entry gets its own location so
@@ -140,6 +149,26 @@ def _broadcast_latest(incident: Incident) -> None:
         q.put_nowait({"incident_id": incident.id, "title": incident.title, "scenario": incident.scenario})
 
 
+def _broadcast_news(item: news_feed.NewsItem) -> None:
+    for q in _news_subscribers:
+        q.put_nowait(json.loads(item.model_dump_json()))
+
+
+async def _news_feed_loop() -> None:
+    """Polls the real Delhi news feed on its own schedule, independent of
+    the simulated incident auto-trigger loop below — every headline here is
+    a real story, geocoded to where it actually happened, whether or not
+    the response engine knows how to simulate a government reaction to it."""
+    while True:
+        try:
+            found = await news_feed.poll_once(_broadcast_news)
+            if found:
+                logger.info("News feed: %d new Delhi headline(s)", found)
+        except Exception:
+            logger.exception("News feed loop iteration failed")
+        await asyncio.sleep(NEWS_FEED_POLL_INTERVAL_SECONDS)
+
+
 async def _run_and_stream(incident: Incident, trigger: dict) -> None:
     """Runs the incident phases, saving + broadcasting after each step."""
     sent = 0
@@ -232,6 +261,8 @@ async def _auto_trigger_loop() -> None:
 async def _start_background_tasks() -> None:
     if AUTO_TRIGGER_ENABLED:
         asyncio.create_task(_auto_trigger_loop())
+    if NEWS_FEED_ENABLED:
+        asyncio.create_task(_news_feed_loop())
 
 
 @app.get("/incidents")
@@ -307,6 +338,31 @@ async def stream_latest():
                 yield {"event": "new_incident", "data": json.dumps(data)}
         finally:
             _latest_subscribers.remove(queue)
+
+    return EventSourceResponse(event_generator())
+
+
+@app.get("/news")
+async def list_news() -> list[dict[str, Any]]:
+    """Recent real Delhi headlines, newest first — same items the
+    /stream/news SSE feed announces as they're found."""
+    return [json.loads(i.model_dump_json()) for i in news_feed.recent_items()]
+
+
+@app.get("/stream/news")
+async def stream_news():
+    """Live feed of real Delhi news items as news_feed.py finds them —
+    powers the frontend's news side panel and its map pins."""
+    queue: asyncio.Queue = asyncio.Queue()
+    _news_subscribers.append(queue)
+
+    async def event_generator():
+        try:
+            while True:
+                data = await queue.get()
+                yield {"event": "news_item", "data": json.dumps(data)}
+        finally:
+            _news_subscribers.remove(queue)
 
     return EventSourceResponse(event_generator())
 

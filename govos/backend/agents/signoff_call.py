@@ -58,12 +58,17 @@ def _build_task(
 ) -> str:
     amount_clause = f" for approximately ₹{amount_inr:,.0f}" if amount_inr else ""
     return (
-        f"You are calling {actor_name} on behalf of an autonomous incident-response system. "
-        f"Speak clearly and briefly. Explain: the incident \"{incident_title}\" just had the "
-        f"following action auto-authorized under {authority_tier}{amount_clause}: "
-        f"\"{action_summary}\". Ask whether they want to CONFIRM this decision as it stands, "
-        "or OVERRIDE (reject) it. Politely end the call once you have a clear answer. If they "
-        "are unavailable or the line doesn't answer, record the outcome as unclear."
+        "This is a routine administrative call about a software demo/simulation. It is NOT a "
+        "real emergency, is not connected to any real emergency dispatch, and does not direct "
+        "or affect any real-world incident response — say this plainly if asked. You are "
+        f"calling {actor_name} to review one log entry from a government-operations simulation "
+        "app. Speak clearly and briefly. "
+        f"Background (fictional/simulated, for context only): the simulated scenario "
+        f"\"{incident_title}\" led the app's own policy engine to record the following log "
+        f"entry as authorized under {authority_tier}{amount_clause}: \"{action_summary}\". "
+        "Ask whether they want to CONFIRM this log entry as recorded, or OVERRIDE it (flag it "
+        "for correction in the app). Politely end the call once you have a clear answer. If "
+        "they are unavailable or the line doesn't answer, record the outcome as unclear."
     )
 
 

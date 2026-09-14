@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AuditRow, Incident, NewsItem, StreamMessage } from "./types";
+import { AuditRow, Directive, Incident, NewsItem, StreamMessage } from "./types";
 
 const API = process.env.NEXT_PUBLIC_GOVOS_API ?? "http://localhost:8080";
 
@@ -116,7 +116,13 @@ export function useNewsFeed(): NewsItem[] {
     fetch(`${API}/news`)
       .then((r) => r.json())
       .then((list: NewsItem[]) => {
-        if (!cancelled) setItems(dedupeByLink(list));
+        if (cancelled) return;
+        setItems(dedupeByLink(list));
+        // Nothing polls itself on a timer (see refreshNews below) — but an
+        // empty cache on first load is a confusing "is this broken?" dead
+        // end, not a cost concern, so this fires exactly one poll the
+        // first time anyone opens the app to an empty feed.
+        if (list.length === 0) refreshNews().catch(() => {});
       })
       .catch(() => {});
 
@@ -204,4 +210,39 @@ export function useAuditLog() {
   }, [refresh]);
 
   return { rows, loading, refresh };
+}
+
+/** City-wide directives — a signed-in authority messaging a specific real
+ * office directly, independent of any one incident. Refetched on demand,
+ * same low-frequency pattern as the audit log. */
+export function useDirectives() {
+  const [directives, setDirectives] = useState<Directive[]>([]);
+
+  const refresh = useCallback(() => {
+    fetch(`${API}/directives`)
+      .then((r) => r.json())
+      .then((list: Directive[]) => setDirectives(list))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  return { directives, refresh };
+}
+
+export async function sendDirective(
+  fromActor: string,
+  fromRole: string,
+  toOffice: string,
+  text: string
+): Promise<Directive> {
+  const res = await fetch(`${API}/directives`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ from_actor: fromActor, from_role: fromRole, to_office: toOffice, text }),
+  });
+  if (!res.ok) throw new Error(`send directive failed: ${res.status}`);
+  return res.json();
 }

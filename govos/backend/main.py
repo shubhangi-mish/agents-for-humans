@@ -17,7 +17,7 @@ from sse_starlette.sse import EventSourceResponse
 
 import incident_engine
 import news_feed
-from models import Comment, Incident
+from models import Comment, Incident, new_id, now
 from store import get_store
 
 logging.basicConfig(level=logging.INFO)
@@ -360,6 +360,40 @@ async def add_comment(incident_id: str, payload: CommentPayload) -> dict[str, An
     store.save(incident)
     _broadcast(incident, {"type": "state", "phase": "comment", "incident": json.loads(incident.model_dump_json())})
     return json.loads(incident.model_dump_json())
+
+
+# City-wide directives — a signed-in authority messaging a specific real
+# office directly, independent of any one incident (unlike Comments, which
+# are scoped to an incident). In-memory only: this is a lightweight
+# messaging log for the demo, not part of the audit-of-record the way
+# approvals/comments are, so it doesn't survive a restart.
+_directives: list[dict[str, Any]] = []
+
+
+class DirectivePayload(BaseModel):
+    from_actor: str
+    from_role: str
+    to_office: str
+    text: str
+
+
+@app.get("/directives")
+async def list_directives() -> list[dict[str, Any]]:
+    return list(reversed(_directives))
+
+
+@app.post("/directives")
+async def send_directive(payload: DirectivePayload) -> dict[str, Any]:
+    directive = {
+        "id": new_id("dir"),
+        "from_actor": payload.from_actor,
+        "from_role": payload.from_role,
+        "to_office": payload.to_office,
+        "text": payload.text,
+        "created_at": now(),
+    }
+    _directives.append(directive)
+    return directive
 
 
 @app.get("/stream/{incident_id}")

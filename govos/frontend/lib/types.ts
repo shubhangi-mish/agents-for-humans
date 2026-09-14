@@ -49,6 +49,15 @@ export interface Comment {
   created_at: number;
 }
 
+export interface Directive {
+  id: string;
+  from_actor: string;
+  from_role: string;
+  to_office: string;
+  text: string;
+  created_at: number;
+}
+
 export interface Incident {
   id: string;
   title: string;

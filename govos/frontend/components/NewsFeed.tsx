@@ -75,17 +75,7 @@ export default function NewsFeed({ items }: { items: NewsItem[] }) {
   }
 
   return (
-    <div
-      style={{
-        width: 340,
-        flexShrink: 0,
-        height: "100%",
-        background: theme.bg,
-        borderLeft: `1px solid ${theme.border}`,
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
+    <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
       <div style={{ padding: "15px 16px 11px", borderBottom: `1px solid ${theme.border}` }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ fontSize: 12.5, fontWeight: 700, letterSpacing: 0.4, color: theme.textPrimary }}>

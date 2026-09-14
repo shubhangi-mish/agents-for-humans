@@ -10,10 +10,10 @@ import IncidentHero from "@/components/IncidentHero";
 import IncidentSummary from "@/components/IncidentSummary";
 import NavBar, { NavLink } from "@/components/NavBar";
 import NewsDetail from "@/components/NewsDetail";
-import NewsFeed from "@/components/NewsFeed";
+import Sidebar from "@/components/Sidebar";
 import { CURRENT_ACTOR, CURRENT_PERSONA } from "@/lib/personas";
 import { dotGridBackground, theme } from "@/lib/theme";
-import { resolveApproval, useAuditLog, useEventStream, useIncidentList, useNewsFeed } from "@/lib/useEventStream";
+import { resolveApproval, useAuditLog, useDirectives, useEventStream, useIncidentList, useNewsFeed } from "@/lib/useEventStream";
 
 const SECTION: React.CSSProperties = {
   background: theme.panel,
@@ -26,6 +26,7 @@ export default function Page() {
   const incidents = useIncidentList();
   const newsItems = useNewsFeed();
   const audit = useAuditLog();
+  const directives = useDirectives();
   const [view, setView] = useState<NavLink>("map");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedNewsId, setSelectedNewsId] = useState<string | null>(null);
@@ -146,7 +147,14 @@ export default function Page() {
             <div style={{ flex: 1, minWidth: 0 }}>
               <CityMap incidents={incidents} newsItems={newsItems} onSelectIncident={selectIncident} onSelectNews={selectNews} />
             </div>
-            <NewsFeed items={newsItems} />
+            <Sidebar
+              newsItems={newsItems}
+              auditRows={audit.rows}
+              onRefreshAudit={audit.refresh}
+              directives={directives.directives}
+              onRefreshDirectives={directives.refresh}
+              onOpenIncident={selectIncident}
+            />
           </div>
         )}
       </div>
